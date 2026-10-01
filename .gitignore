@@ -53,3 +53,13 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Rust build output
+/target/
+
+# Image build output
+/image/work/
+/image/out/
+/image/cache/
+*.gguf
+*.iso
