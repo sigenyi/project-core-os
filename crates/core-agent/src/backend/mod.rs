@@ -6,7 +6,7 @@ mod rescue;
 use std::fmt;
 
 pub use llama::LlamaServer;
-pub use rescue::RescuePlanner;
+pub use rescue::{RescuePlanner, plan as rescue_plan};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {

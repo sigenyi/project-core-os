@@ -10,7 +10,7 @@
 use serde_json::{Value, json};
 
 use super::{BackendError, CompletionRequest, InferenceBackend, Role};
-use crate::prompt::{OBSERVATION_PREFIX, REQUEST_PREFIX, STATE_HEADER};
+use crate::prompt::{OBSERVATION_PREFIX, REQUEST_PREFIX, STATE_HEADER, strip_guidance};
 
 #[derive(Default)]
 pub struct RescuePlanner;
@@ -53,7 +53,7 @@ fn split_request(content: &str) -> (&str, &str) {
 
 fn summarise_observation(obs: &str) -> (String, &'static str, Value) {
     let (header, body) = obs.split_once('\n').unwrap_or((obs, ""));
-    let body = body.lines().filter(|l| !l.starts_with("Find the cause in this error")).collect::<Vec<_>>().join("\n");
+    let body = strip_guidance(body);
     let body: String = body.trim().chars().take(900).collect();
     let message = if header.contains("FAILED") || header.contains("DENIED") || header.contains("invalid") {
         format!("That did not work. {}{}", header.trim_start_matches(OBSERVATION_PREFIX).trim(), with_body(&body))

@@ -187,9 +187,9 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "core-agent",
- "core-guardian",
  "core-protocol",
  "core-sense",
+ "libc",
  "serde_json",
 ]
 

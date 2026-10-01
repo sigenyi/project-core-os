@@ -262,7 +262,7 @@ impl Agent {
             let result = if failed.contains(&key) {
                 StepResult {
                     observation: format!(
-                        "{OBSERVATION_PREFIX} (repeat) This exact action already failed in this task. Choose a different approach or respond to the user."
+                        "{OBSERVATION_PREFIX} (repeat)\nThis exact action already failed in this task. Choose a different approach or respond to the user."
                     ),
                     success: false,
                 }
@@ -283,7 +283,7 @@ impl Agent {
 
         // Out of steps or retries: make the model explain, constrained to `respond`.
         transcript.push(ChatMessage::user(format!(
-            "{OBSERVATION_PREFIX} (limit reached) Stop now. Respond to the user: say what you tried, what failed, and what they could do next."
+            "{OBSERVATION_PREFIX} (limit reached)\nStop now. Respond to the user: say what you tried, what failed, and what they could do next."
         )));
         let messages = self.prompt.build(&history, &state, request, &transcript);
         let grammar = self.respond_grammar.clone();
@@ -335,7 +335,7 @@ impl Agent {
         let Some(path) = self.config.programs.resolve(program) else {
             let available = self.config.programs.available().join(", ");
             return fail(format!(
-                "{OBSERVATION_PREFIX} (launch_program: FAILED) {program} is not installed or not allowed. Available programs: {available}. It may need install_package first."
+                "{OBSERVATION_PREFIX} (launch_program: FAILED)\n{program} is not installed or not allowed. Available programs: {available}. It may need install_package first."
             ));
         };
         // Options can make programs run commands (vim -c, less +!), so let the human decide.
@@ -359,7 +359,7 @@ impl Agent {
             }
             Err(e) => {
                 ui.event(AgentEvent::ActionFinished { description: &description, success: false, detail: &e });
-                fail(format!("{OBSERVATION_PREFIX} (launch_program: FAILED) {e}"))
+                fail(format!("{OBSERVATION_PREFIX} (launch_program: FAILED)\n{e}"))
             }
         }
     }
@@ -379,11 +379,7 @@ impl Agent {
             other => Ok(other),
         });
         let result = self.observe(action.name(), response);
-        let detail = if result.success {
-            String::new()
-        } else {
-            result.observation.lines().nth(1).unwrap_or(result.observation.as_str()).chars().take(160).collect()
-        };
+        let detail = if result.success { String::new() } else { prompt::failure_detail(&result.observation) };
         ui.event(AgentEvent::ActionFinished { description: &description, success: result.success, detail: &detail });
         result
     }
@@ -398,16 +394,16 @@ impl Agent {
                 StepResult { observation: prompt::observe_rejection(action, kind, &reason), success: false }
             }
             Ok(Response::Error { message }) => StepResult {
-                observation: format!("{OBSERVATION_PREFIX} ({action}: Guardian error) {message}"),
+                observation: format!("{OBSERVATION_PREFIX} ({action}: Guardian error)\n{message}"),
                 success: false,
             },
             Ok(other) => StepResult {
-                observation: format!("{OBSERVATION_PREFIX} ({action}: unexpected reply) {other:?}"),
+                observation: format!("{OBSERVATION_PREFIX} ({action}: unexpected reply)\n{other:?}"),
                 success: false,
             },
             Err(e) => StepResult {
                 observation: format!(
-                    "{OBSERVATION_PREFIX} ({action}: FAILED) The Guardian service is unreachable: {e}. System actions are impossible until it runs again; tell the user."
+                    "{OBSERVATION_PREFIX} ({action}: FAILED)\nThe Guardian service is unreachable: {e}. System actions are impossible until it runs again; tell the user."
                 ),
                 success: false,
             },

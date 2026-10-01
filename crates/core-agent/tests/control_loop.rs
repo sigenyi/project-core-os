@@ -304,7 +304,7 @@ fn policy_denials_are_observed() {
     let mut ui = Recorder::default();
     h.agent.handle("show me the password file", &mut ui);
     let obs = last_user_message(&h.calls, 1);
-    assert!(obs.starts_with("OBSERVATION (read_file: DENIED by system policy) /etc/shadow is off limits"), "{obs}");
+    assert!(obs.starts_with("OBSERVATION (read_file: DENIED by system policy)\n/etc/shadow is off limits"), "{obs}");
 }
 
 #[test]

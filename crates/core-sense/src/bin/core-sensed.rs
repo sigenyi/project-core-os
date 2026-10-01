@@ -40,6 +40,11 @@ struct Cli {
 }
 
 fn main() -> ExitCode {
+    // Behave like a normal Unix tool when piped into `head`: exit quietly on EPIPE.
+    // SAFETY: restoring the default disposition of SIGPIPE before any threads exist.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     let cli = Cli::parse();
     core_protocol::logging::init(cli.verbose);
     let sensor = Sensor::new(Sysroot::at(&cli.sysroot));

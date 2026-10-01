@@ -225,26 +225,60 @@ pub fn observe_report(report: &ExecutionReport, max_chars: usize) -> String {
         out.push_str(clip_middle(body.trim_end(), max_chars).as_str());
     }
     if !report.success {
-        out.push_str(
-            "\nFind the cause in this error, then try a different approach or explain the problem to the user.",
-        );
+        out.push('\n');
+        out.push_str(GUIDE_FAILED);
     }
     out
 }
 
+/// Guidance lines appended to observations for the model. Always on a line of their
+/// own so user-facing paths can strip them ([`strip_guidance`]).
+pub const GUIDE_FAILED: &str =
+    "Find the cause in this error, then try a different approach or explain the problem to the user.";
+pub const GUIDE_DENIED: &str = "Choose another way or explain this to the user.";
+pub const GUIDE_DECLINED: &str = "Do not retry it; respond to the user.";
+pub const GUIDE_INVALID: &str = "Output a corrected action.";
+const GUIDANCE: [&str; 4] = [GUIDE_FAILED, GUIDE_DENIED, GUIDE_DECLINED, GUIDE_INVALID];
+
 pub fn observe_rejection(action: &str, kind: RejectKind, reason: &str) -> String {
-    match kind {
-        RejectKind::Declined => {
-            format!("{OBSERVATION_PREFIX} ({action}: the user declined). Do not retry it; respond to the user.")
-        }
-        RejectKind::Denied => format!(
-            "{OBSERVATION_PREFIX} ({action}: DENIED by system policy) {reason}. Choose another way or explain this to the user."
-        ),
-        RejectKind::Invalid => format!("{OBSERVATION_PREFIX} (invalid action) {reason}. Output a corrected action."),
-        RejectKind::Expired => format!("{OBSERVATION_PREFIX} ({action}: approval expired) {reason}"),
-        RejectKind::RateLimited => format!("{OBSERVATION_PREFIX} ({action}: rate limited) {reason}"),
-        RejectKind::NotPrivileged => format!("{OBSERVATION_PREFIX} ({action}: not available) {reason}"),
+    let (status, guide) = match kind {
+        RejectKind::Declined => ("the user declined", Some(GUIDE_DECLINED)),
+        RejectKind::Denied => ("DENIED by system policy", Some(GUIDE_DENIED)),
+        RejectKind::Invalid => ("invalid action", Some(GUIDE_INVALID)),
+        RejectKind::Expired => ("approval expired", None),
+        RejectKind::RateLimited => ("rate limited", None),
+        RejectKind::NotPrivileged => ("not available", None),
+    };
+    let mut out = if action.is_empty() {
+        format!("{OBSERVATION_PREFIX} ({status})")
+    } else {
+        format!("{OBSERVATION_PREFIX} ({action}: {status})")
+    };
+    for line in [Some(reason.trim()).filter(|r| !r.is_empty()), guide].into_iter().flatten() {
+        out.push('\n');
+        out.push_str(line);
     }
+    out
+}
+
+/// Remove model-directed guidance lines, leaving what the machine reported.
+pub fn strip_guidance(observation: &str) -> String {
+    observation.lines().filter(|l| !GUIDANCE.contains(&l.trim())).collect::<Vec<_>>().join("\n")
+}
+
+/// A one-line, human-readable reason for a failed observation.
+pub fn failure_detail(observation: &str) -> String {
+    let stripped = strip_guidance(observation);
+    let mut lines = stripped.lines();
+    let header = lines.next().unwrap_or("");
+    lines
+        .map(str::trim)
+        .find(|l| !l.is_empty() && !l.starts_with("$ "))
+        .map(String::from)
+        .unwrap_or_else(|| header.trim_start_matches(OBSERVATION_PREFIX).trim().trim_matches(['(', ')']).to_string())
+        .chars()
+        .take(200)
+        .collect()
 }
 
 pub fn observe_text(label: &str, body: &str, max_chars: usize) -> String {
@@ -330,8 +364,16 @@ mod tests {
         assert!(o.contains("different approach"));
         assert_eq!(
             observe_rejection("reboot", RejectKind::Declined, ""),
-            "OBSERVATION (reboot: the user declined). Do not retry it; respond to the user."
+            "OBSERVATION (reboot: the user declined)\nDo not retry it; respond to the user."
         );
+        let denied = observe_rejection("read_file", RejectKind::Denied, "/etc/shadow is off limits");
+        assert_eq!(failure_detail(&denied), "/etc/shadow is off limits");
+        assert_eq!(
+            strip_guidance(&denied),
+            "OBSERVATION (read_file: DENIED by system policy)\n/etc/shadow is off limits"
+        );
+        assert_eq!(failure_detail(&o), "Unit foo.service not found.");
+        assert_eq!(failure_detail("OBSERVATION (repeat)"), "repeat");
         assert_eq!(clip_middle("abcdefghij", 4), "ab\n[... 6 characters omitted ...]\nij");
     }
 
