@@ -74,7 +74,13 @@ cp -a "$releng" "$profile"
 cp "$here/profile/packages.x86_64" "$profile/packages.x86_64"
 cat "$here/profile/profiledef.append.sh" >> "$profile/profiledef.sh"
 airootfs="$profile/airootfs"
-cp -a "$repo/system/." "$airootfs/"
+# releng enables its own network stack (systemd-networkd + iwd) and services we do
+# not ship; NetworkManager owns networking here. systemd-resolved stays enabled.
+rm -rf "$airootfs/etc/systemd/network"
+find "$airootfs/etc/systemd/system" -path '*.wants/*' \( -name 'systemd-networkd*' -o -name 'iwd.service' \
+    -o -name 'sshd.service' -o -name 'reflector.service' -o -name 'choose-mirror.service' \
+    -o -name 'livecd-*' \) -delete
+cp -a "$repo/system/etc" "$repo/system/usr" "$airootfs/"
 cp -a "$here/profile/airootfs/." "$airootfs/"
 
 install -Dm755 -t "$airootfs/usr/bin" \

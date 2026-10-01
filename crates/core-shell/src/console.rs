@@ -104,27 +104,35 @@ impl Console {
         self.interactive
     }
 
-    /// Read one line. `None` means end of input (Ctrl-D / EOF).
+    /// Read one line. `None` means end of input (Ctrl-D / EOF). Ctrl-C clears the line.
     pub fn read_line(&mut self, prompt: &str) -> Option<String> {
+        loop {
+            match self.read_line_interruptible(prompt) {
+                Err(()) => continue,
+                Ok(line) => return line,
+            }
+        }
+    }
+
+    /// Like [`Console::read_line`], but Ctrl-C returns `Err(())` instead of retrying.
+    fn read_line_interruptible(&mut self, prompt: &str) -> Result<Option<String>, ()> {
         self.clear_status();
         match self.editor.as_mut() {
-            Some(ed) => loop {
-                match ed.readline(prompt) {
-                    Ok(line) => {
-                        if !line.trim().is_empty() {
-                            let _ = ed.add_history_entry(line.as_str());
-                        }
-                        return Some(line);
+            Some(ed) => match ed.readline(prompt) {
+                Ok(line) => {
+                    if !line.trim().is_empty() {
+                        let _ = ed.add_history_entry(line.as_str());
                     }
-                    Err(ReadlineError::Interrupted) => continue, // Ctrl-C clears the line
-                    Err(_) => return None,
+                    Ok(Some(line))
                 }
+                Err(ReadlineError::Interrupted) => Err(()),
+                Err(_) => Ok(None),
             },
             None => {
                 let mut line = String::new();
                 match std::io::stdin().read_line(&mut line) {
-                    Ok(0) | Err(_) => None,
-                    Ok(_) => Some(line.trim_end_matches(['\n', '\r']).to_string()),
+                    Ok(0) | Err(_) => Ok(None),
+                    Ok(_) => Ok(Some(line.trim_end_matches(['\n', '\r']).to_string())),
                 }
             }
         }
@@ -232,7 +240,8 @@ impl Frontend for Console {
         };
         let head = format!("  {} {}  [{risk}]", self.style.warn(), self.style.bold(request.summary));
         self.line(&head);
-        let answer = self.read_line("    Allow? [y/N] ").unwrap_or_default();
+        // Ctrl-C or end of input means no.
+        let answer = self.read_line_interruptible("    Allow? [y/N] ").ok().flatten().unwrap_or_default();
         matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
     }
 

@@ -87,9 +87,9 @@ the model can correct itself.
 2. **Inference.** One grammar-constrained completion from `llama-server`
    (`/v1/chat/completions` with `grammar`). If the server is unreachable, the
    deterministic rescue planner answers instead, so the machine stays operable.
-3. **Routing.** `respond`/`ask_user` end the turn. `get_telemetry` and
-   `launch_program` are handled by the agent (as the user). Everything else goes to
-   the Guardian.
+3. **Routing.** `respond`/`ask_user` end the turn. `get_telemetry`,
+   `read_file`, `list_directory` and `launch_program` need no privilege and are
+   handled by the agent, as the user. Everything else goes to the Guardian.
 4. **Observation.** The result (stdout/stderr, exit status, denial, or the user's
    refusal) is added to the transcript as an `OBSERVATION` and the loop repeats.
 5. **Self-correction, bounded.** Failures carry their error output back to the
@@ -129,9 +129,10 @@ The pipeline for every request, in `Guardian::handle`:
    root, listed uids, or members of the `core` group.
 2. **Rate limiting** per connection.
 3. **Validation** of the raw intent, again. The Guardian never trusts the client.
-4. **Policy:** disabled actions, protected services and packages, path rules for
-   reads (checked again on the canonical path after following symlinks), and the
-   risk ceiling for automatic approval.
+4. **Policy:** disabled actions, forbidden units (power and rescue) and protected
+   ones (checked under their resolved names, so aliases do not help), protected
+   packages, argument-raised risk (exfiltration-shaped hostnames), and the risk
+   ceiling for automatic approval.
 5. **Confirmation:** risky actions are parked under a random single-use token bound
    to the connection. The shell asks the human directly; the model never sees or
    produces tokens.
@@ -142,7 +143,9 @@ The pipeline for every request, in `Guardian::handle`:
    supported. Each runs with a scrubbed environment, `/dev/null` stdin, its own
    process group (killed whole on timeout), and capped output that keeps head and
    tail. Per-user services (PipeWire) are reached by dropping to the peer's uid.
-   Reads, brightness, signals and fstab edits are implemented natively.
+   Brightness, signals (thread IDs resolved to their process first), swap-file and
+   fstab edits are implemented natively. No native operation takes a path from the
+   model. Only changes are serialised; reads never wait behind them.
 8. **Audit:** every decision and outcome is appended to `/var/log/core/audit.jsonl`
    with secrets redacted.
 

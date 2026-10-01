@@ -45,6 +45,16 @@ never_confirm = []
 risk = {}
 
 [services]
+# Unit aliases are resolved first (autovt@tty1 is getty@tty1), so these cannot be
+# reached under another name. Targets and mounts are never accepted as services.
+#
+# Units no service action may touch at all (power state and rescue modes have their
+# own confirmed actions):
+# forbidden = ["systemd-reboot", "systemd-poweroff", "systemd-halt", "systemd-kexec",
+#              "systemd-soft-reboot", "systemd-suspend", "systemd-hibernate",
+#              "systemd-hybrid-sleep", "systemd-suspend-then-hibernate",
+#              "emergency", "rescue", "debug-shell"]
+#
 # Units that may be inspected but never stopped, restarted or disabled.
 protected = [
     "core-guardian", "core-guardian.socket", "core-sensed", "core-inference",
@@ -59,12 +69,6 @@ protected = [
     "systemd", "systemd-libs", "glibc", "pacman", "bash", "coreutils", "util-linux",
     "filesystem", "core-os", "llama.cpp", "sudo",
 ]
-
-# [paths]
-# readable = ["/etc", "/var/log", "/proc", "/sys", "/home", "/usr/share", ...]
-# denied = ["/etc/shadow", "/etc/ssh", "/root", ...]
-# denied_names = [".ssh", ".gnupg", "environ", ...]
-# denied_suffixes = [".key", ".pem", "_rsa", ...]
 
 # [tools]
 # Absolute paths of the programs the Guardian may run. Only these can ever execute.

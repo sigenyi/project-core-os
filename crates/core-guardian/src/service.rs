@@ -4,7 +4,7 @@
 //! rate limit → validate → route → authorise → (confirm) → plan → execute → audit.
 //! The socket server and the agent's in-process development mode both drive it.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -32,7 +32,6 @@ pub struct Peer {
 pub struct Session {
     pub peer: Peer,
     confirmations: Confirmations,
-    recent: VecDeque<Instant>,
 }
 
 pub struct Guardian {
@@ -40,8 +39,10 @@ pub struct Guardian {
     runner: Box<dyn CommandRunner>,
     probe: Box<dyn SystemProbe>,
     audit: AuditLog,
-    /// Executions are serialised: one system change at a time.
+    /// System changes are serialised: one at a time. Read-only actions do not wait.
     exec_lock: Mutex<()>,
+    /// Recent request times per uid (shared by all of a user's connections).
+    recent: Mutex<HashMap<u32, VecDeque<Instant>>>,
 }
 
 const MAX_PENDING_CONFIRMATIONS: usize = 4;
@@ -53,7 +54,7 @@ impl Guardian {
         probe: Box<dyn SystemProbe>,
         audit: AuditLog,
     ) -> Self {
-        Guardian { config, runner, probe, audit, exec_lock: Mutex::new(()) }
+        Guardian { config, runner, probe, audit, exec_lock: Mutex::new(()), recent: Mutex::new(HashMap::new()) }
     }
 
     pub fn config(&self) -> &GuardianConfig {
@@ -67,7 +68,6 @@ impl Guardian {
                 Duration::from_secs(self.config.confirmation_timeout_secs),
                 MAX_PENDING_CONFIRMATIONS,
             ),
-            recent: VecDeque::new(),
         }
     }
 
@@ -85,21 +85,24 @@ impl Guardian {
         }
     }
 
-    fn rate_limited(&self, session: &mut Session) -> bool {
+    /// Sliding one-minute window per uid, so reconnecting does not reset the limit.
+    fn rate_limited(&self, uid: u32) -> bool {
         let window = Duration::from_secs(60);
-        while session.recent.front().is_some_and(|t| t.elapsed() > window) {
-            session.recent.pop_front();
+        let mut recent = self.recent.lock().unwrap_or_else(|e| e.into_inner());
+        let times = recent.entry(uid).or_default();
+        while times.front().is_some_and(|t| t.elapsed() > window) {
+            times.pop_front();
         }
-        if session.recent.len() >= self.config.max_requests_per_minute as usize {
+        if times.len() >= self.config.max_requests_per_minute as usize {
             return true;
         }
-        session.recent.push_back(Instant::now());
+        times.push_back(Instant::now());
         false
     }
 
     fn execute(&self, session: &mut Session, id: u64, intent: Intent) -> Response {
         let peer = session.peer;
-        if self.rate_limited(session) {
+        if self.rate_limited(peer.uid) {
             self.audit_event(peer, id, json!({"action": clip(&intent.action), "decision": "rate_limited"}));
             return reject(id, RejectKind::RateLimited, "too many requests; slow down");
         }
@@ -117,7 +120,7 @@ impl Guardian {
         if v.spec.executor != ActionExecutor::Guardian {
             return reject(id, RejectKind::NotPrivileged, format!("{} is handled by the agent", v.name()));
         }
-        match Policy::new(&self.config).authorize(&v) {
+        match Policy::with_probe(&self.config, self.probe.as_ref()).authorize(&v) {
             Decision::Deny { reason } => {
                 self.audit_action(peer, id, &v, "denied", Some(&reason), None);
                 reject(id, RejectKind::Denied, reason)
@@ -152,7 +155,9 @@ impl Guardian {
     }
 
     fn run(&self, peer: Peer, id: u64, v: &ValidatedAction, decision: &str) -> Response {
-        let _serialised = self.exec_lock.lock().unwrap_or_else(|e| e.into_inner());
+        // Changes run one at a time; reads (bounded by command timeouts) never queue
+        // behind a long package installation.
+        let _serialised = (v.risk() > Risk::Observe).then(|| self.exec_lock.lock().unwrap_or_else(|e| e.into_inner()));
         let report = match Planner::new(&self.config, self.probe.as_ref()).plan(&v.action) {
             Ok(plan) => Executor {
                 config: &self.config,
@@ -325,8 +330,12 @@ mod tests {
             Response::Rejected { kind: RejectKind::Invalid, .. }
         ));
         assert!(matches!(
-            exec(&g, &mut s, "read_file", json!({"path": "/etc/shadow"})),
+            exec(&g, &mut s, "stop_service", json!({"service": "dbus"})),
             Response::Rejected { kind: RejectKind::Denied, .. }
+        ));
+        assert!(matches!(
+            exec(&g, &mut s, "read_file", json!({"path": "/etc/fstab"})),
+            Response::Rejected { kind: RejectKind::NotPrivileged, .. }
         ));
         assert!(matches!(
             exec(&g, &mut s, "respond", json!({"message": "hi"})),

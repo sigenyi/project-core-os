@@ -32,6 +32,14 @@ max_age_secs = 30
 allow_installed = false
 # allowed = { htop = "/usr/bin/htop", nano = "/usr/bin/nano", w3m = "/usr/bin/w3m" }
 
+[files]
+# read_file / list_directory run as you, so the kernel already limits them to what
+# you may read. These rules additionally keep credentials out of the AI's context.
+# readable = ["/etc", "/var/log", "/proc", "/sys", "/home", "/usr/share", ...]
+# denied = ["/etc/shadow", "/etc/ssh", "/etc/wireguard", "/var/lib/bluetooth", ...]
+# denied_names = [".ssh", ".gnupg", "keyrings", "environ", "kmsg", ...]
+# denied_suffixes = [".key", ".pem", "_rsa", ".kdbx", ...]
+
 [voice]
 enabled = true
 # whisper-cli: load the speech model per utterance (no resident memory)

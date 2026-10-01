@@ -1,28 +1,23 @@
 //! Operations implemented directly instead of by spawning a program.
 //!
-//! Reading files and listing directories natively lets the Guardian enforce its path
-//! policy on the *canonical* path (after following symlinks) and refuse device nodes,
-//! FIFOs and binary files that would hang or flood the model.
+//! None of these takes a path chosen by the model: files the user asks about are read
+//! by the unprivileged agent, never by root.
 
-use std::fs::{self, File};
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::fs::{self, File, OpenOptions};
+use std::io::{ErrorKind, Read, Write};
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use core_protocol::choice::Signal;
 
 use crate::config::GuardianConfig;
 use crate::plan::NativeOp;
-use crate::policy::Policy;
 
-const MAX_DIR_ENTRIES: usize = 200;
-const MAX_READ_BYTES: u64 = 1024 * 1024;
+const MAX_READ_BYTES: u64 = 64 * 1024;
 
 pub fn execute(op: &NativeOp, config: &GuardianConfig) -> Result<String, String> {
-    let policy = Policy::new(config);
     match op {
-        NativeOp::ListDir { path } => list_dir(path, &policy),
-        NativeOp::ReadFile { path, lines, tail } => read_file(path, *lines, *tail, &policy),
+        NativeOp::ReadFixedFile { path, lines } => read_fixed_file(Path::new(path), *lines),
         NativeOp::SetBrightness { percent } => set_brightness(&config.native.sysfs, *percent),
         NativeOp::Signal { pid, signal } => send_signal(&config.native.procfs, *pid, *signal),
         NativeOp::RemoveSwapFile => remove_swap_file(&config.native.swapfile),
@@ -30,102 +25,24 @@ pub fn execute(op: &NativeOp, config: &GuardianConfig) -> Result<String, String>
     }
 }
 
-fn canonical_readable(path: &Path, policy: &Policy) -> Result<PathBuf, String> {
-    let canon = fs::canonicalize(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    policy.check_readable(&canon)?;
-    Ok(canon)
-}
-
-fn list_dir(path: &Path, policy: &Policy) -> Result<String, String> {
-    let canon = canonical_readable(path, policy)?;
-    if !canon.is_dir() {
-        return Err(format!("{} is not a directory", canon.display()));
-    }
-    let mut entries: Vec<(String, String)> = fs::read_dir(&canon)
-        .map_err(|e| format!("{}: {e}", canon.display()))?
-        .filter_map(|e| e.ok())
-        .map(|e| {
-            let name = e.file_name().to_string_lossy().into_owned();
-            let line = match e.file_type() {
-                Ok(t) if t.is_dir() => format!("{name}/"),
-                Ok(t) if t.is_symlink() => {
-                    let target = fs::read_link(e.path()).map(|t| t.display().to_string()).unwrap_or_default();
-                    format!("{name} -> {target}")
-                }
-                Ok(_) => match e.metadata() {
-                    Ok(m) => format!("{name}  {}", human_size(m.len())),
-                    Err(_) => name.clone(),
-                },
-                Err(_) => name.clone(),
-            };
-            (name, line)
-        })
-        .collect();
-    entries.sort();
-    let total = entries.len();
-    let mut out: Vec<String> = entries.into_iter().take(MAX_DIR_ENTRIES).map(|(_, l)| l).collect();
-    if total > MAX_DIR_ENTRIES {
-        out.push(format!("... and {} more entries", total - MAX_DIR_ENTRIES));
-    }
-    if total == 0 {
-        out.push("(empty directory)".into());
-    }
-    let mut text = format!("{}:\n", canon.display());
-    text.push_str(&out.join("\n"));
-    Ok(text)
-}
-
-fn human_size(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
-    let mut v = bytes as f64;
-    let mut unit = 0;
-    while v >= 1024.0 && unit < UNITS.len() - 1 {
-        v /= 1024.0;
-        unit += 1;
-    }
-    if unit == 0 { format!("{bytes} B") } else { format!("{v:.1} {}", UNITS[unit]) }
-}
-
-fn read_file(path: &Path, lines: usize, tail: bool, policy: &Policy) -> Result<String, String> {
-    let canon = canonical_readable(path, policy)?;
-    let meta = fs::metadata(&canon).map_err(|e| format!("{}: {e}", canon.display()))?;
-    let ft = meta.file_type();
-    if ft.is_dir() {
-        return Err(format!("{} is a directory; use list_directory", canon.display()));
-    }
-    if ft.is_block_device() || ft.is_char_device() || ft.is_fifo() || ft.is_socket() || !ft.is_file() {
-        return Err(format!("{} is not a regular file", canon.display()));
-    }
-    let mut file = File::open(&canon).map_err(|e| format!("{}: {e}", canon.display()))?;
-    // procfs/sysfs report size 0, so always read with a cap; for large files read the
-    // relevant end only.
-    let mut skipped_prefix = false;
-    if tail && meta.len() > MAX_READ_BYTES {
-        file.seek(SeekFrom::Start(meta.len() - MAX_READ_BYTES)).map_err(|e| e.to_string())?;
-        skipped_prefix = true;
+/// Read the first `lines` lines of a fixed system file, never blocking.
+fn read_fixed_file(path: &Path, lines: usize) -> Result<String, String> {
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK | libc::O_CLOEXEC)
+        .open(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    if !file.metadata().map(|m| m.is_file()).unwrap_or(false) {
+        return Err(format!("{} is not a regular file", path.display()));
     }
     let mut bytes = Vec::new();
-    file.take(MAX_READ_BYTES).read_to_end(&mut bytes).map_err(|e| format!("{}: {e}", canon.display()))?;
-    if bytes.iter().take(8192).any(|b| *b == 0) {
-        return Err(format!("{} is a binary file", canon.display()));
+    match file.take(MAX_READ_BYTES).read_to_end(&mut bytes) {
+        Ok(_) => {}
+        Err(e) if e.kind() == ErrorKind::WouldBlock => {}
+        Err(e) => return Err(format!("{}: {e}", path.display())),
     }
     let text = String::from_utf8_lossy(&bytes);
-    let mut all: Vec<&str> = text.lines().collect();
-    if skipped_prefix && !all.is_empty() {
-        all.remove(0); // first line is probably partial
-    }
-    let total = all.len();
-    let shown: Vec<&str> =
-        if tail { all[total.saturating_sub(lines)..].to_vec() } else { all.into_iter().take(lines).collect() };
-    let mut out = shown.join("\n");
-    if total > shown.len() || skipped_prefix {
-        let which = if tail { "last" } else { "first" };
-        out.push_str(&format!("\n[showing the {which} {} lines of {}]", shown.len(), canon.display()));
-    }
-    if out.is_empty() {
-        out = "(empty file)".into();
-    }
-    Ok(out)
+    Ok(text.lines().take(lines).collect::<Vec<_>>().join("\n"))
 }
 
 /// Pick a backlight, preferring firmware/platform interfaces as the kernel recommends.
@@ -166,6 +83,14 @@ fn set_brightness(sysfs: &Path, percent: u32) -> Result<String, String> {
 fn send_signal(procfs: &Path, pid: u32, signal: Signal) -> Result<String, String> {
     let comm = fs::read_to_string(procfs.join(pid.to_string()).join("comm"))
         .map_err(|_| format!("no process with pid {pid}"))?;
+    // kill(2) on a thread id signals the whole thread group, so resolve it first.
+    let tgid = fs::read_to_string(procfs.join(pid.to_string()).join("status"))
+        .ok()
+        .and_then(|s| s.lines().find_map(|l| l.strip_prefix("Tgid:").and_then(|v| v.trim().parse::<u32>().ok())))
+        .unwrap_or(pid);
+    if tgid == std::process::id() || tgid == 1 {
+        return Err("refusing to signal the Guardian itself or init".into());
+    }
     let sig = match signal {
         Signal::Term => libc::SIGTERM,
         Signal::Kill => libc::SIGKILL,
@@ -229,64 +154,11 @@ mod tests {
 
     fn config_for(dir: &Path) -> GuardianConfig {
         let mut c = GuardianConfig::default();
-        c.paths.readable = vec![dir.to_path_buf()];
         c.native.sysfs = dir.join("sys");
         c.native.procfs = dir.join("proc");
         c.native.fstab = dir.join("fstab");
         c.native.swapfile = dir.join("swapfile");
         c
-    }
-
-    #[test]
-    fn reads_files_with_limits() {
-        let dir = tempfile::tempdir().unwrap();
-        let c = config_for(dir.path());
-        let f = dir.path().join("log.txt");
-        fs::write(&f, (1..=10).map(|i| format!("line {i}\n")).collect::<String>()).unwrap();
-        let head = execute(&NativeOp::ReadFile { path: f.clone(), lines: 2, tail: false }, &c).unwrap();
-        assert!(head.starts_with("line 1\nline 2\n[showing the first 2 lines"), "{head}");
-        let tail = execute(&NativeOp::ReadFile { path: f, lines: 2, tail: true }, &c).unwrap();
-        assert!(tail.starts_with("line 9\nline 10\n[showing the last 2"), "{tail}");
-    }
-
-    #[test]
-    fn symlinks_cannot_escape_the_policy() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut c = config_for(dir.path());
-        let secret_dir = dir.path().join("secret");
-        fs::create_dir(&secret_dir).unwrap();
-        fs::write(secret_dir.join("data"), "top secret").unwrap();
-        c.paths.denied.push(secret_dir.clone());
-        symlink(secret_dir.join("data"), dir.path().join("innocent")).unwrap();
-        let err =
-            execute(&NativeOp::ReadFile { path: dir.path().join("innocent"), lines: 5, tail: false }, &c).unwrap_err();
-        assert!(err.contains("off limits"), "{err}");
-        // Outside the readable roots entirely.
-        let err = execute(&NativeOp::ReadFile { path: "/etc/hostname".into(), lines: 5, tail: false }, &c).unwrap_err();
-        assert!(err.contains("outside the readable areas"), "{err}");
-    }
-
-    #[test]
-    fn refuses_binaries_and_devices() {
-        let dir = tempfile::tempdir().unwrap();
-        let c = config_for(dir.path());
-        fs::write(dir.path().join("bin"), [0u8, 1, 2, 3]).unwrap();
-        let err = execute(&NativeOp::ReadFile { path: dir.path().join("bin"), lines: 5, tail: false }, &c).unwrap_err();
-        assert!(err.contains("binary"));
-        let mut c2 = c.clone();
-        c2.paths.readable.push("/dev".into());
-        let err = execute(&NativeOp::ReadFile { path: "/dev/zero".into(), lines: 5, tail: false }, &c2).unwrap_err();
-        assert!(err.contains("not a regular file"), "{err}");
-    }
-
-    #[test]
-    fn lists_directories() {
-        let dir = tempfile::tempdir().unwrap();
-        let c = config_for(dir.path());
-        fs::create_dir(dir.path().join("sub")).unwrap();
-        fs::write(dir.path().join("a.txt"), "hello").unwrap();
-        let out = execute(&NativeOp::ListDir { path: dir.path().to_path_buf() }, &c).unwrap();
-        assert!(out.contains("a.txt  5 B") && out.contains("sub/"), "{out}");
     }
 
     #[test]
@@ -325,6 +197,34 @@ mod tests {
         symlink(dir.path().join("precious"), dir.path().join("swapfile")).unwrap();
         assert!(execute(&NativeOp::RemoveSwapFile, &c).is_err());
         assert!(dir.path().join("precious").exists());
+    }
+
+    #[test]
+    fn fixed_reads_do_not_block_on_fifos() {
+        let dir = tempfile::tempdir().unwrap();
+        let fifo = dir.path().join("fifo");
+        let c_path = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
+        // SAFETY: valid NUL-terminated path.
+        assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+        let err = read_fixed_file(&fifo, 5).unwrap_err();
+        assert!(err.contains("not a regular file"), "{err}");
+        assert!(read_fixed_file(Path::new("/etc/hostname"), 1).is_ok() || !Path::new("/etc/hostname").exists());
+    }
+
+    #[test]
+    fn threads_of_the_guardian_are_protected() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+        let worker = std::thread::spawn(move || {
+            // SAFETY: gettid has no preconditions.
+            tx.send(unsafe { libc::gettid() } as u32).unwrap();
+            let _ = stop_rx.recv();
+        });
+        let tid = rx.recv().unwrap();
+        let err = send_signal(Path::new("/proc"), tid, Signal::Term).unwrap_err();
+        assert!(err.contains("Guardian itself"), "{err}");
+        stop_tx.send(()).unwrap();
+        worker.join().unwrap();
     }
 
     #[test]

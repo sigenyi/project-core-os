@@ -41,8 +41,11 @@ fn no_control(value: &str, what: &str, allow_newlines: bool) -> Result {
     check_charset(value, what, |c| !c.is_control() || (allow_newlines && (c == '\n' || c == '\t')))
 }
 
-/// Unit types the Guardian is willing to manage.
-pub const UNIT_SUFFIXES: &[&str] = &[".service", ".socket", ".timer", ".target", ".path", ".mount"];
+/// Unit types the service actions may touch. Targets are excluded on purpose:
+/// starting `reboot.target` or `poweroff.target` would bypass the confirmed
+/// `reboot`/`poweroff` actions, and restarting a target cascades widely. Mounts are
+/// excluded because restarting one can unmount data in use.
+pub const UNIT_SUFFIXES: &[&str] = &[".service", ".socket", ".timer", ".path"];
 
 /// A systemd unit name such as `wpa_supplicant`, `bluetooth.service` or `getty@tty2.service`.
 pub fn service_name(value: &str) -> Result {
@@ -73,15 +76,27 @@ pub fn package_name(value: &str) -> Result {
     const WHAT: &str = "package name";
     check_len(value, 1, 128, WHAT)?;
     check_first_alnum(value, WHAT)?;
-    check_charset(value, WHAT, |c| c.is_ascii_alphanumeric() || "@._+-".contains(c))
+    check_charset(value, WHAT, |c| c.is_ascii_alphanumeric() || "@._+-".contains(c))?;
+    // `apt-get install foo-` means "remove foo".
+    if value.ends_with('-') {
+        return Err(format!("{WHAT} must not end with '-'"));
+    }
+    Ok(())
 }
 
 /// A free-text package search query (`web browser`, `audio`).
 pub fn package_query(value: &str) -> Result {
     const WHAT: &str = "search query";
     check_len(value, 1, 64, WHAT)?;
-    check_first_alnum(value, WHAT)?;
-    check_charset(value, WHAT, |c| c.is_ascii_alphanumeric() || " ._+-".contains(c))
+    check_charset(value, WHAT, |c| c.is_ascii_alphanumeric() || " ._+-".contains(c))?;
+    // Every word becomes its own argument, so every word must not look like an option.
+    for word in value.split_whitespace() {
+        check_first_alnum(word, "each search word")?;
+    }
+    if value.trim().is_empty() {
+        return Err(format!("{WHAT} must not be empty"));
+    }
+    Ok(())
 }
 
 /// A kernel module name (`iwlwifi`, `snd_hda_intel`, `snd-hda-intel`).
@@ -220,7 +235,20 @@ mod tests {
         ] {
             assert!(service_name(ok).is_ok(), "{ok}");
         }
-        for bad in ["", "-foo", "--now", "foo bar", "a/b", "x.conf", "..service", "a;b", "$(reboot)"] {
+        for bad in [
+            "",
+            "-foo",
+            "--now",
+            "foo bar",
+            "a/b",
+            "x.conf",
+            "..service",
+            "a;b",
+            "$(reboot)",
+            "reboot.target",
+            "poweroff.target",
+            "home.mount",
+        ] {
             assert!(service_name(bad).is_err(), "{bad}");
         }
     }
@@ -230,9 +258,17 @@ mod tests {
         for ok in ["firefox", "linux-firmware", "g++", "python3.12", "lib32-mesa", "NetworkManager"] {
             assert!(package_name(ok).is_ok(), "{ok}");
         }
-        for bad in ["", "-y", "--noconfirm", "a b", "a/b", "foo;rm", "../x"] {
+        for bad in ["", "-y", "--noconfirm", "a b", "a/b", "foo;rm", "../x", "sudo-"] {
             assert!(package_name(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn search_words_cannot_be_options() {
+        assert!(package_query("web browser").is_ok());
+        assert!(package_query("web --update-cache").is_err());
+        assert!(package_query("-x").is_err());
+        assert!(package_query("   ").is_err());
     }
 
     #[test]

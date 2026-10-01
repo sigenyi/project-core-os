@@ -4,7 +4,6 @@
 //! carries arguments as discrete argv entries, and is produced by the [`crate::planner`]
 //! from a typed action. No shell is ever involved.
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use core_protocol::choice::Signal;
@@ -115,15 +114,15 @@ impl CommandSpec {
 }
 
 /// Operations implemented directly in Rust instead of by running a program.
+///
+/// None of them takes a path from the model: the Guardian never opens a file the
+/// model named (user file reads happen in the unprivileged agent).
 #[derive(Debug, Clone, PartialEq)]
 pub enum NativeOp {
-    ListDir {
-        path: PathBuf,
-    },
-    ReadFile {
-        path: PathBuf,
+    /// Read a fixed system file; the path is a compile-time constant.
+    ReadFixedFile {
+        path: &'static str,
         lines: usize,
-        tail: bool,
     },
     SetBrightness {
         percent: u32,
@@ -143,10 +142,7 @@ pub enum NativeOp {
 impl NativeOp {
     pub fn describe(&self) -> String {
         match self {
-            NativeOp::ListDir { path } => format!("list {}", path.display()),
-            NativeOp::ReadFile { path, lines, tail } => {
-                format!("read {} lines of {}{}", lines, path.display(), if *tail { " (from the end)" } else { "" })
-            }
+            NativeOp::ReadFixedFile { path, .. } => format!("read {path}"),
             NativeOp::SetBrightness { percent } => format!("set backlight to {percent}%"),
             NativeOp::Signal { pid, signal } => format!("send SIG{} to {pid}", signal.as_str().to_uppercase()),
             NativeOp::RemoveSwapFile => "remove swap file".into(),
@@ -157,7 +153,7 @@ impl NativeOp {
 
     /// Whether the operation changes system state (skipped in dry-run mode).
     pub fn is_mutating(&self) -> bool {
-        !matches!(self, NativeOp::ListDir { .. } | NativeOp::ReadFile { .. })
+        !matches!(self, NativeOp::ReadFixedFile { .. })
     }
 }
 

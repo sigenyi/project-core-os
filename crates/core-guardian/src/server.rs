@@ -11,6 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
+use std::time::Duration;
 
 use core_protocol::wire::{Request, Response, read_frame, write_frame};
 
@@ -172,18 +173,30 @@ pub fn serve(guardian: Arc<Guardian>, listener: UnixListener, access: AccessCont
 }
 
 fn handle_connection(guardian: &Guardian, mut stream: UnixStream, peer: Peer) {
+    // Idle connections are closed eventually (clients reconnect transparently), but
+    // never while a confirmation could still be pending.
+    let idle = Duration::from_secs(guardian.config().confirmation_timeout_secs.max(540) + 60);
+    let _ = stream.set_read_timeout(Some(idle));
     let mut session = guardian.new_session(peer);
     loop {
         let request: Request = match read_frame(&mut stream) {
             Ok(Some(r)) => r,
             Ok(None) => return,
+            Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut) => return,
             Err(e) => {
                 let _ = write_frame(&mut stream, &Response::Error { message: format!("bad request: {e}") });
                 return;
             }
         };
         let response = guardian.handle(&mut session, request);
-        if write_frame(&mut stream, &response).is_err() {
+        let sent = match write_frame(&mut stream, &response) {
+            Err(e) if e.kind() == io::ErrorKind::InvalidInput => write_frame(
+                &mut stream,
+                &Response::Error { message: "the response was too large to send; the action did run".into() },
+            ),
+            other => other,
+        };
+        if sent.is_err() {
             return;
         }
     }

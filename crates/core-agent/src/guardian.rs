@@ -58,23 +58,32 @@ impl SocketGuardian {
         Ok(self.stream.as_mut().expect("just connected"))
     }
 
-    fn try_call(&mut self, request: &Request) -> io::Result<Response> {
-        let s = self.connect()?;
-        write_frame(s, request)?;
-        read_frame(s)?.ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "the Guardian closed the connection"))
+    /// Send a request and read the reply. On error, says whether the request may have
+    /// reached the Guardian (in which case it must not be sent again).
+    fn try_call(&mut self, request: &Request) -> Result<Response, (io::Error, bool)> {
+        let s = self.connect().map_err(|e| (e, false))?;
+        // A write to a connection the Guardian already closed fails with EPIPE, so a
+        // failed write means the request was not delivered.
+        write_frame(s, request).map_err(|e| (e, false))?;
+        match read_frame(s) {
+            Ok(Some(r)) => Ok(r),
+            Ok(None) => Err((io::Error::new(io::ErrorKind::UnexpectedEof, "the Guardian closed the connection"), true)),
+            Err(e) => Err((e, true)),
+        }
     }
 
     fn call(&mut self, request: &Request) -> io::Result<Response> {
         match self.try_call(request) {
             Ok(r) => Ok(r),
-            Err(e) => {
+            Err((e, delivered)) => {
                 self.stream = None;
-                // Retry once on a dropped connection (e.g. the Guardian restarted). Not for
-                // confirmations: tokens belong to the old connection and died with it.
-                if matches!(request, Request::Confirm { .. }) {
+                // Retry once if the connection was stale (e.g. the Guardian restarted) and
+                // the request never arrived. Never after delivery: the action may have
+                // run. Never for confirmations: tokens die with their connection.
+                if delivered || matches!(request, Request::Confirm { .. }) {
                     return Err(e);
                 }
-                self.try_call(request)
+                self.try_call(request).map_err(|(e, _)| e)
             }
         }
     }

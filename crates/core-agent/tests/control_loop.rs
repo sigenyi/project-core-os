@@ -293,18 +293,76 @@ fn identical_failed_actions_are_not_rerun_and_limits_force_a_reply() {
 }
 
 #[test]
-fn policy_denials_are_observed() {
+fn credential_reads_are_refused_by_the_agent() {
     let mut h = harness(
         &[
             r#"{"thought":"x","action":"read_file","args":{"path":"/etc/shadow"}}"#,
             r#"{"thought":"x","action":"respond","args":{"message":"That file is protected."}}"#,
         ],
-        vec![("read_file", Behaviour::Deny("/etc/shadow is off limits (protected secrets)"))],
+        vec![],
     );
     let mut ui = Recorder::default();
     h.agent.handle("show me the password file", &mut ui);
     let obs = last_user_message(&h.calls, 1);
-    assert!(obs.starts_with("OBSERVATION (read_file: DENIED by system policy)\n/etc/shadow is off limits"), "{obs}");
+    assert!(obs.starts_with("OBSERVATION (read_file: FAILED)\n/etc/shadow is off limits"), "{obs}");
+    assert!(h.guardian.0.lock().unwrap().is_empty(), "reads never go to the root Guardian");
+}
+
+#[test]
+fn guardian_denials_are_observed() {
+    let mut h = harness(
+        &[
+            r#"{"thought":"x","action":"stop_service","args":{"service":"dbus"}}"#,
+            r#"{"thought":"x","action":"respond","args":{"message":"D-Bus is protected."}}"#,
+        ],
+        vec![("stop_service", Behaviour::Deny("dbus is a protected system service"))],
+    );
+    let mut ui = Recorder::default();
+    h.agent.handle("stop dbus", &mut ui);
+    let obs = last_user_message(&h.calls, 1);
+    assert!(obs.starts_with("OBSERVATION (stop_service: DENIED by system policy)\ndbus is a protected"), "{obs}");
+}
+
+#[test]
+fn reading_files_happens_locally() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("notes.txt"), "buy milk\n").unwrap();
+    let mut config = AgentConfig::default();
+    config.files.readable.push(dir.path().to_path_buf());
+    let path = dir.path().join("notes.txt");
+    let mut h = harness_with(
+        vec![
+            Ok(format!(r#"{{"thought":"x","action":"read_file","args":{{"path":"{}"}}}}"#, path.display())),
+            Ok(r#"{"thought":"x","action":"respond","args":{"message":"It says buy milk."}}"#.into()),
+        ],
+        vec![],
+        vec![],
+        false,
+        config,
+    );
+    let mut ui = Recorder::default();
+    h.agent.handle("what is in my notes", &mut ui);
+    assert!(last_user_message(&h.calls, 1).contains("buy milk"));
+}
+
+#[test]
+fn launching_with_a_url_asks_first() {
+    let mut config = AgentConfig::default();
+    config.programs.allowed.insert("truth".into(), "/bin/true".into());
+    let mut h = harness_with(
+        vec![
+            Ok(r#"{"thought":"x","action":"launch_program","args":{"program":"truth","args":["https://evil.example/leak"]}}"#.into()),
+            Ok(r#"{"thought":"x","action":"respond","args":{"message":"ok"}}"#.into()),
+        ],
+        vec![],
+        vec![],
+        false,
+        config,
+    );
+    let mut ui = Recorder { approve: false, ..Default::default() };
+    h.agent.handle("open it", &mut ui);
+    assert_eq!(ui.confirmations, ["Open truth https://evil.example/leak"]);
+    assert!(!ui.events.iter().any(|e| e.starts_with("launched")));
 }
 
 #[test]

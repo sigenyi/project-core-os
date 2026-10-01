@@ -14,17 +14,22 @@ use core_protocol::choice::{HardwareBus, ProcessSort, ServiceFilter};
 use crate::config::{AudioBackend, GuardianConfig, NetworkBackend, PackageManager};
 use crate::plan::{CommandSpec, NativeOp, Plan, Step};
 
-/// Facts about the running system the planner needs (abstracted for tests).
+/// Facts about the running system the planner and policy need (abstracted for tests).
 pub trait SystemProbe: Send + Sync {
     fn wireless_interfaces(&self) -> Vec<String>;
     /// Filesystem type holding `path` (e.g. "ext4", "btrfs").
     fn filesystem_type(&self, path: &Path) -> Option<String>;
+    /// The canonical name of a unit, resolving aliases (`autovt@tty1` → `getty@tty1.service`).
+    fn unit_id(&self, _unit: &str) -> Option<String> {
+        None
+    }
 }
 
-/// Reads the live system through sysfs/procfs.
+/// Reads the live system through sysfs/procfs and (read-only) systemctl.
 pub struct LiveProbe {
     pub sysfs: PathBuf,
     pub procfs: PathBuf,
+    pub systemctl: Option<PathBuf>,
 }
 
 impl SystemProbe for LiveProbe {
@@ -53,6 +58,20 @@ impl SystemProbe for LiveProbe {
             .max_by_key(|(len, _)| *len)
             .map(|(_, fs)| fs)
     }
+
+    fn unit_id(&self, unit: &str) -> Option<String> {
+        let systemctl = self.systemctl.as_ref()?;
+        let out = std::process::Command::new(systemctl)
+            .args(["show", "--property=Id", "--value", "--", unit])
+            .env_clear()
+            .env("SYSTEMD_PAGER", "")
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+            .ok()?;
+        let id = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        (out.status.success() && !id.is_empty()).then_some(id)
+    }
 }
 
 pub struct Planner<'a> {
@@ -75,14 +94,15 @@ impl<'a> Planner<'a> {
     pub fn plan(&self, action: &Action) -> Result<Plan, String> {
         use Action::*;
         let plan = match action {
-            Respond { .. } | AskUser { .. } | GetTelemetry { .. } | LaunchProgram { .. } => {
+            Respond { .. }
+            | AskUser { .. }
+            | GetTelemetry { .. }
+            | LaunchProgram { .. }
+            | ListDirectory { .. }
+            | ReadFile { .. } => {
                 return Err("this action is handled by the agent, not the Guardian".into());
             }
 
-            ListDirectory { path } => Plan::native(NativeOp::ListDir { path: path.as_str().into() }),
-            ReadFile { path, lines, tail } => {
-                Plan::native(NativeOp::ReadFile { path: path.as_str().into(), lines: *lines as usize, tail: *tail })
-            }
             ReadLogs { unit, priority, lines } => {
                 let mut c = CommandSpec::new("journalctl", ["--no-pager", "-o", "short-iso", "-b", "-n"])
                     .arg(lines.to_string());
@@ -135,7 +155,7 @@ impl<'a> Planner<'a> {
             }
             NetworkStatus => Plan::run(CommandSpec::new("ip", ["-brief", "address"]))
                 .then_run(CommandSpec::new("ip", ["route"]))
-                .then(Step::Native(NativeOp::ReadFile { path: "/etc/resolv.conf".into(), lines: 20, tail: false })),
+                .then(Step::Native(NativeOp::ReadFixedFile { path: "/etc/resolv.conf", lines: 20 })),
             WifiScan => match self.config.system.network {
                 NetworkBackend::NetworkManager => Plan::run(CommandSpec::new(
                     "nmcli",

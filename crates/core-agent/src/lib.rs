@@ -14,6 +14,7 @@
 
 pub mod backend;
 pub mod config;
+pub mod files;
 pub mod frontend;
 pub mod guardian;
 pub mod orchestrator;

@@ -32,6 +32,10 @@ use runner::SystemRunner;
 
 /// A Guardian wired to the real system.
 pub fn live_guardian(config: GuardianConfig, audit: audit::AuditLog) -> Guardian {
-    let probe = LiveProbe { sysfs: config.native.sysfs.clone(), procfs: config.native.procfs.clone() };
+    let probe = LiveProbe {
+        sysfs: config.native.sysfs.clone(),
+        procfs: config.native.procfs.clone(),
+        systemctl: config.tools.get("systemctl").cloned(),
+    };
     Guardian::new(config, Box::new(SystemRunner), Box::new(probe), audit)
 }

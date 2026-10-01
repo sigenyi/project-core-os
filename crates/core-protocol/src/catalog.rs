@@ -232,12 +232,12 @@ pub static CATALOG: &[ActionSpec] = &[
         ],
         example: r#"{"program":"nano","args":["/home/core/notes.txt"]}"#),
     // ---- inspect -------------------------------------------------------------------
-    action!("list_directory", Inspect, Guardian, Observe,
+    action!("list_directory", Inspect, Agent, Observe,
         "List the entries of a directory.",
         params: [req("path", ParamKind::Path, "directory")],
         example: r#"{"path":"/etc/systemd/network"}"#),
-    action!("read_file", Inspect, Guardian, Observe,
-        "Read a text file (config files, logs). Secrets such as /etc/shadow are refused.",
+    action!("read_file", Inspect, Agent, Observe,
+        "Read a text file (config files, logs) with the user's own permissions. Credentials are refused.",
         params: [
             req("path", ParamKind::Path, "file"),
             LINES,

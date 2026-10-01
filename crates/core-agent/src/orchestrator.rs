@@ -326,7 +326,43 @@ impl Agent {
                 }
             }
             Action::LaunchProgram { program, args } => self.launch(program.as_str(), args, ui),
+            Action::ListDirectory { path } => {
+                let result = crate::files::list_directory(path.as_ref(), &self.config.files);
+                self.local_result(&action.describe(), action.name(), result, ui)
+            }
+            Action::ReadFile { path, lines, tail } => {
+                let result = crate::files::read_file(path.as_ref(), *lines as usize, *tail, &self.config.files);
+                self.local_result(&action.describe(), action.name(), result, ui)
+            }
             _ => self.privileged(intent, action, ui),
+        }
+    }
+
+    /// Report an action the agent performed itself (reads) like a Guardian action.
+    fn local_result(
+        &self,
+        description: &str,
+        action: &str,
+        result: Result<String, String>,
+        ui: &mut dyn Frontend,
+    ) -> StepResult {
+        ui.event(AgentEvent::ActionStarted { description, risk: Risk::Observe });
+        let max = self.config.agent.observation_chars;
+        match result {
+            Ok(body) => {
+                ui.event(AgentEvent::ActionFinished { description, success: true, detail: "" });
+                StepResult {
+                    observation: prompt::observe_text(&format!("{action}: succeeded"), &body, max),
+                    success: true,
+                }
+            }
+            Err(e) => {
+                ui.event(AgentEvent::ActionFinished { description, success: false, detail: &e });
+                StepResult {
+                    observation: format!("{OBSERVATION_PREFIX} ({action}: FAILED)\n{e}\n{}", prompt::GUIDE_FAILED),
+                    success: false,
+                }
+            }
         }
     }
 
@@ -338,8 +374,9 @@ impl Agent {
                 "{OBSERVATION_PREFIX} (launch_program: FAILED)\n{program} is not installed or not allowed. Available programs: {available}. It may need install_package first."
             ));
         };
-        // Options can make programs run commands (vim -c, less +!), so let the human decide.
-        if args.iter().any(|a| a.starts_with('-') || a.starts_with('+')) {
+        // Options can make programs run commands (vim -c, less +!) and URLs make them
+        // contact the network (a way to leak data), so let the human decide.
+        if args.iter().any(|a| a.starts_with('-') || a.starts_with('+') || a.contains("://")) {
             let summary = format!("Open {program} {}", args.join(" "));
             if !ui.confirm(&ConfirmRequest { summary: &summary, risk: Risk::Medium }) {
                 return fail(prompt::observe_rejection("launch_program", RejectKind::Declined, ""));

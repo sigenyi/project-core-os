@@ -13,6 +13,9 @@ pub struct AgentConfig {
     pub guardian: GuardianLink,
     pub telemetry: TelemetryConfig,
     pub programs: ProgramsConfig,
+    /// What `read_file`/`list_directory` may show the model (on top of the user's own
+    /// file permissions).
+    pub files: core_protocol::paths::PathPolicy,
     pub voice: VoiceConfig,
 }
 

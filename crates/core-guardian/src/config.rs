@@ -35,7 +35,6 @@ pub struct GuardianConfig {
     pub max_requests_per_minute: u32,
     pub max_connections: usize,
     pub system: SystemConfig,
-    pub paths: PathPolicy,
     pub services: ServicePolicy,
     pub packages: PackagePolicy,
     pub actions: ActionPolicy,
@@ -91,81 +90,14 @@ impl Default for SystemConfig {
     }
 }
 
-/// Which files `read_file`/`list_directory` may touch. Checked on the canonical path
-/// (after resolving symlinks), so a link cannot smuggle in a denied file.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct PathPolicy {
-    /// Allowed prefixes.
-    pub readable: Vec<PathBuf>,
-    /// Denied prefixes (win over `readable`).
-    pub denied: Vec<PathBuf>,
-    /// Denied file or directory names anywhere in the path.
-    pub denied_names: Vec<String>,
-    /// Denied file name suffixes.
-    pub denied_suffixes: Vec<String>,
-}
-
-impl Default for PathPolicy {
-    fn default() -> Self {
-        let paths = |v: &[&str]| v.iter().map(PathBuf::from).collect();
-        let strings = |v: &[&str]| v.iter().map(|s| s.to_string()).collect();
-        PathPolicy {
-            readable: paths(&[
-                "/etc",
-                "/var/log",
-                "/proc",
-                "/sys",
-                "/home",
-                "/usr/share",
-                "/usr/lib",
-                "/boot",
-                "/run",
-                "/tmp",
-                "/opt",
-                "/srv",
-                "/var/lib",
-                "/var/cache",
-            ]),
-            denied: paths(&[
-                "/etc/shadow",
-                "/etc/shadow-",
-                "/etc/gshadow",
-                "/etc/gshadow-",
-                "/etc/sudoers",
-                "/etc/sudoers.d",
-                "/etc/ssh",
-                "/etc/core/secrets",
-                "/etc/NetworkManager/system-connections",
-                "/etc/wpa_supplicant",
-                "/var/lib/iwd",
-                "/var/lib/NetworkManager",
-                "/var/lib/systemd/credential.secret",
-                "/run/credentials",
-                "/proc/kcore",
-                "/root",
-            ]),
-            denied_names: strings(&[
-                ".ssh",
-                ".gnupg",
-                ".password-store",
-                ".netrc",
-                ".pgpass",
-                "environ",
-                "mem",
-                "pagemap",
-                "kcore",
-            ]),
-            denied_suffixes: strings(&[".key", ".pem", ".p12", ".pfx", "_rsa", "_ed25519", "_ecdsa", "_dsa", ".kdbx"]),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ServicePolicy {
     /// Units that may be inspected but never stopped, restarted or disabled.
     pub protected: Vec<String>,
+    /// Units no service action may touch at all, not even start: power-state and
+    /// rescue units have dedicated, confirmed actions (`reboot`, `poweroff`).
+    pub forbidden: Vec<String>,
 }
 
 impl Default for ServicePolicy {
@@ -184,7 +116,24 @@ impl Default for ServicePolicy {
             "getty@tty1",
             "polkit",
         ];
-        ServicePolicy { protected: protected.iter().map(|s| s.to_string()).collect() }
+        let forbidden = [
+            "systemd-reboot",
+            "systemd-poweroff",
+            "systemd-halt",
+            "systemd-kexec",
+            "systemd-soft-reboot",
+            "systemd-suspend",
+            "systemd-hibernate",
+            "systemd-hybrid-sleep",
+            "systemd-suspend-then-hibernate",
+            "emergency",
+            "rescue",
+            "debug-shell",
+        ];
+        ServicePolicy {
+            protected: protected.iter().map(|s| s.to_string()).collect(),
+            forbidden: forbidden.iter().map(|s| s.to_string()).collect(),
+        }
     }
 }
 
@@ -320,7 +269,6 @@ impl Default for GuardianConfig {
             max_requests_per_minute: 60,
             max_connections: 8,
             system: SystemConfig::default(),
-            paths: PathPolicy::default(),
             services: ServicePolicy::default(),
             packages: PackagePolicy::default(),
             actions: ActionPolicy::default(),

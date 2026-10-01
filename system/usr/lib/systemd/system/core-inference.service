@@ -18,6 +18,9 @@ ExecStart=/usr/lib/core/llama/bin/llama-server \
 Restart=on-failure
 RestartSec=5
 DynamicUser=yes
+# GPU drivers keep compiled shaders here between restarts.
+CacheDirectory=core-inference
+Environment=XDG_CACHE_HOME=/var/cache/core-inference
 # Loading a multi-gigabyte model from disk can take a while on slow media.
 TimeoutStartSec=300
 LimitMEMLOCK=infinity
