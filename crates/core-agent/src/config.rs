@@ -248,7 +248,7 @@ impl Default for VoiceConfig {
             enabled: true,
             transcriber: TranscriberKind::WhisperCli,
             url: "http://127.0.0.1:8081".into(),
-            cli: "/usr/bin/whisper-cli".into(),
+            cli: "/usr/lib/core/whisper/bin/whisper-cli".into(),
             model: "/usr/share/core/models/whisper.bin".into(),
             recorder: "/usr/bin/arecord".into(),
             device: None,
@@ -281,6 +281,13 @@ mod tests {
         assert_eq!(c.inference.backend, BackendKind::Rescue);
         assert_eq!(c.agent.max_steps, 3);
         assert!(AgentConfig::from_toml("[agent]\nbogus = 1").is_err());
+    }
+
+    #[test]
+    fn shipped_config_is_valid() {
+        let c = AgentConfig::from_toml(include_str!("../../../system/etc/core/agent.toml")).unwrap();
+        assert_eq!(c.telemetry.path, PathBuf::from(core_protocol::DEFAULT_TELEMETRY_PATH));
+        assert_eq!(c.guardian.socket, PathBuf::from(core_protocol::DEFAULT_GUARDIAN_SOCKET));
     }
 
     #[test]

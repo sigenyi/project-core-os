@@ -30,4 +30,4 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub const DEFAULT_GUARDIAN_SOCKET: &str = "/run/core/guardian.sock";
 
 /// Default location of the telemetry snapshot written by `core-sensed`.
-pub const DEFAULT_TELEMETRY_PATH: &str = "/run/core/telemetry.json";
+pub const DEFAULT_TELEMETRY_PATH: &str = "/run/core-sense/telemetry.json";

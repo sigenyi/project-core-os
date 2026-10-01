@@ -1,0 +1,45 @@
+# C.O.R.E. agent: how the conversational shell thinks and acts.
+# Every key is optional; the values shown are defaults.
+
+[inference]
+# llama  = local model served by core-inference.service (llama.cpp)
+# rescue = rule-based planner, no model (also used automatically as a fallback)
+backend = "llama"
+url = "http://127.0.0.1:8080"
+temperature = 0.2
+max_tokens = 384
+# Must match CORE_CTX_SIZE in /etc/core/inference.env.
+context_tokens = 8192
+timeout_secs = 180
+fallback_to_rescue = true
+
+[agent]
+max_steps = 10
+max_consecutive_failures = 3
+history_turns = 4
+observation_chars = 3000
+
+[guardian]
+socket = "/run/core/guardian.sock"
+
+[telemetry]
+path = "/run/core-sense/telemetry.json"
+max_age_secs = 30
+
+[programs]
+# Interactive console programs the AI may open for you (they run as you).
+# Missing programs are ignored. Shells and interpreters are never launched.
+allow_installed = false
+# allowed = { htop = "/usr/bin/htop", nano = "/usr/bin/nano", w3m = "/usr/bin/w3m" }
+
+[voice]
+enabled = true
+# whisper-cli: load the speech model per utterance (no resident memory)
+# whisper-server: keep it loaded (enable core-whisper.service)
+transcriber = "whisper-cli"
+cli = "/usr/lib/core/whisper/bin/whisper-cli"
+model = "/usr/share/core/models/whisper.bin"
+url = "http://127.0.0.1:8081"
+recorder = "/usr/bin/arecord"
+max_seconds = 30
+language = "auto"

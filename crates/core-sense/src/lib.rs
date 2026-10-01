@@ -2,7 +2,7 @@
 //!
 //! A [`Sensor`] runs a set of [`collectors::Collector`]s against a [`Sysroot`] and
 //! derives [`insights`]. The `core-sensed` daemon publishes the resulting [`Snapshot`]
-//! to `/run/core/telemetry.json`; the agent embeds a compact [`summary`] of it in every
+//! to `/run/core-sense/telemetry.json`; the agent embeds a compact [`summary`] of it in every
 //! prompt. Collectors read procfs/sysfs directly rather than shelling out, so
 //! perception needs no privileges beyond CAP_SYSLOG for the kernel log.
 

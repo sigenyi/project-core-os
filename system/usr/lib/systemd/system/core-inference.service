@@ -1,0 +1,50 @@
+[Unit]
+Description=C.O.R.E. local language model (llama.cpp)
+Documentation=https://github.com/sigenyi/project-core-os/blob/main/docs/MODELS.md
+# The model file is a symlink chosen at image build or by core-ctl.
+ConditionPathExists=/usr/share/core/models/core.gguf
+
+[Service]
+Type=simple
+Environment=CORE_CTX_SIZE=8192 CORE_GPU_LAYERS=0 CORE_LLAMA_ARGS=
+EnvironmentFile=-/etc/core/inference.env
+ExecStart=/usr/lib/core/llama/bin/llama-server \
+    --model /usr/share/core/models/core.gguf \
+    --host 127.0.0.1 --port 8080 \
+    --ctx-size ${CORE_CTX_SIZE} \
+    --n-gpu-layers ${CORE_GPU_LAYERS} \
+    --parallel 1 --jinja --no-webui \
+    $CORE_LLAMA_ARGS
+Restart=on-failure
+RestartSec=5
+DynamicUser=yes
+# Loading a multi-gigabyte model from disk can take a while on slow media.
+TimeoutStartSec=300
+LimitMEMLOCK=infinity
+
+# Offline by construction: loopback only, no outbound network at all.
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+# GPU offload (Vulkan) needs the DRM render nodes; nothing else from /dev.
+# ROCm (/dev/kfd) or NVIDIA (/dev/nvidia*) need a drop-in adding DeviceAllow= lines.
+DevicePolicy=closed
+DeviceAllow=char-drm rw
+
+[Install]
+WantedBy=multi-user.target

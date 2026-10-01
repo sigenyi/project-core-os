@@ -1,0 +1,13 @@
+[Unit]
+Description=C.O.R.E. Guardian socket
+Documentation=https://github.com/sigenyi/project-core-os/blob/main/docs/ARCHITECTURE.md
+
+[Socket]
+ListenStream=/run/core/guardian.sock
+SocketUser=root
+SocketGroup=core
+SocketMode=0660
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

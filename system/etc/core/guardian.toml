@@ -1,0 +1,71 @@
+# C.O.R.E. Guardian policy: what root may do on the AI's behalf.
+#
+# This file must be owned by root and not writable by group/others, or the
+# Guardian refuses to start. Every key is optional; the values shown are defaults.
+# Check a change with:  core-guardian --check
+
+# Where to listen when not socket-activated (core-guardian.socket normally owns it).
+# socket = "/run/core/guardian.sock"
+
+# Members of these groups (and root) may connect.
+allowed_groups = ["core"]
+# allowed_uids = []
+
+audit_log = "/var/log/core/audit.jsonl"
+
+# Highest risk executed without asking the human: observe | low | medium | high.
+#   observe  read-only (logs, status, disk usage)
+#   low      trivially reversible (volume, restarting a service)
+#   medium   persistent configuration (enable services, Wi-Fi, hostname)
+#   high     can break things (packages, swap, reboot)
+auto_approve = "low"
+
+confirmation_timeout_secs = 120
+command_timeout_secs = 60
+package_timeout_secs = 1800
+max_output_bytes = 16384
+max_requests_per_minute = 60
+
+# Simulate every change (read-only actions still run). Useful while testing.
+dry_run = false
+
+[system]
+package_manager = "pacman"     # pacman | apt | dnf | zypper | apk | xbps
+audio = "wpctl"                # wpctl (PipeWire) | pactl (PulseAudio) | amixer (ALSA)
+network = "networkmanager"     # networkmanager | iwd
+
+[actions]
+# Refuse these outright, e.g. ["poweroff", "remove_package"].
+disabled = []
+# Always ask, whatever the risk.
+always_confirm = []
+# Never ask (dangerous; for kiosk-style deployments only).
+never_confirm = []
+# Re-rate individual actions, e.g. { set_hostname = "low" }.
+risk = {}
+
+[services]
+# Units that may be inspected but never stopped, restarted or disabled.
+protected = [
+    "core-guardian", "core-guardian.socket", "core-sensed", "core-inference",
+    "dbus", "dbus-broker", "dbus.socket", "systemd-journald", "systemd-logind",
+    "systemd-udevd", "getty@tty1", "polkit",
+]
+
+[packages]
+# Never removable.
+protected = [
+    "base", "linux", "linux-lts", "linux-zen", "linux-hardened", "linux-firmware",
+    "systemd", "systemd-libs", "glibc", "pacman", "bash", "coreutils", "util-linux",
+    "filesystem", "core-os", "llama.cpp", "sudo",
+]
+
+# [paths]
+# readable = ["/etc", "/var/log", "/proc", "/sys", "/home", "/usr/share", ...]
+# denied = ["/etc/shadow", "/etc/ssh", "/root", ...]
+# denied_names = [".ssh", ".gnupg", "environ", ...]
+# denied_suffixes = [".key", ".pem", "_rsa", ...]
+
+# [tools]
+# Absolute paths of the programs the Guardian may run. Only these can ever execute.
+# systemctl = "/usr/bin/systemctl"

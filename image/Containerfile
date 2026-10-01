@@ -1,0 +1,9 @@
+# Build environment for C.O.R.E. OS images (used by build-in-container.sh).
+FROM docker.io/library/archlinux:latest
+
+RUN pacman -Syu --noconfirm --needed \
+        archiso base-devel rust cmake ninja git curl \
+        vulkan-headers vulkan-icd-loader shaderc glslang \
+    && pacman -Scc --noconfirm
+
+WORKDIR /src

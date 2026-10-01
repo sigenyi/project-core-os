@@ -63,3 +63,8 @@ dkms.conf
 /image/cache/
 *.gguf
 *.iso
+
+# archiso package lists are named *.x86_64 (ignored above as executables)
+!image/profile/packages.x86_64
+# systemd/sysctl drop-in directories are named *.d (C dependency files above)
+!*.d/

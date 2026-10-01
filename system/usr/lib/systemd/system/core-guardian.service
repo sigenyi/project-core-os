@@ -1,0 +1,24 @@
+[Unit]
+Description=C.O.R.E. Guardian (privileged executor for the AI)
+Documentation=https://github.com/sigenyi/project-core-os/blob/main/docs/SECURITY.md
+Requires=core-guardian.socket
+After=core-guardian.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/core-guardian --config /etc/core/guardian.toml
+Restart=on-failure
+RestartSec=2
+
+# The Guardian must stay root to manage packages, services and devices, so the
+# hardening below only removes what none of its actions need.
+LogsDirectory=core
+LogsDirectoryMode=0750
+UMask=0022
+ProtectHome=read-only
+PrivateTmp=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=no
+SystemCallArchitectures=native
+KeyringMode=private

@@ -406,6 +406,13 @@ mod tests {
     }
 
     #[test]
+    fn shipped_config_is_valid() {
+        let c = GuardianConfig::from_toml(include_str!("../../../system/etc/core/guardian.toml")).unwrap();
+        assert_eq!(c.auto_approve, Risk::Low);
+        assert!(c.services.protected.iter().any(|s| s == "core-guardian"));
+    }
+
+    #[test]
     fn rejects_mistakes() {
         assert!(GuardianConfig::from_toml("[actions]\ndisabled = [\"rm_rf\"]").is_err());
         assert!(GuardianConfig::from_toml("typo_field = 1").is_err());

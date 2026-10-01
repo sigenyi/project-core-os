@@ -1,0 +1,5 @@
+enable core-guardian.socket
+enable core-sensed.service
+enable core-inference.service
+disable core-whisper.service
+enable NetworkManager.service

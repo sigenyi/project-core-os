@@ -1,7 +1,7 @@
 //! core-sensed: the C.O.R.E. telemetry daemon.
 //!
 //! Periodically snapshots the machine and publishes it atomically to
-//! `/run/core/telemetry.json` for the agent. `--once` prints a single snapshot,
+//! `/run/core-sense/telemetry.json` for the agent. `--once` prints a single snapshot,
 //! which is handy for debugging perception on any Linux machine.
 
 use std::collections::HashSet;
