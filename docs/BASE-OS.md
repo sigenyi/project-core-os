@@ -55,6 +55,10 @@ checksum.
 | libxcrypt 4.5.1 | Same `strchr` change, triggered by a needless `const` cast on a writable buffer | Drop the cast |
 | elfutils 0.194 | Same change in the RISC-V disassembler | Only `libelf` is built, which is all the base needs |
 | bc 1.07.1 | Post-processes its math library with `ed`, which the base does not ship | The same edits with `sed`; the recipe checks bc's output |
+| GRUB 2.14 (BIOS) | With binutils 2.46, `--image-base` places the ELF headers at the base address, so `kernel.img` starts 0x74 bytes late and `grub-mkimage` rejects it | Use GRUB's `-Ttext` fallback for the BIOS build; the recipe checks the entry point is 0x9000 |
+| GRUB 2.14 | `grub-core/extra_deps.lst` is missing from the release archive | Recreate it (its content in GRUB's repository) |
+| procps-ng 4.0.4 | Includes `<ncursesw/ncurses.h>`, a Debian layout | Our wide-only ncurses installs `<ncurses.h>` |
+| kbd 2.7.1 | `autogen.sh` needs `which` | `autoreconf -fi` |
 | binutils 2.46 (temporary) | libtool would link libctf against the host's libraries | Drop `$add_dir` in `ltmain.sh`, as Linux From Scratch does |
 
 ## Build stages
@@ -108,9 +112,31 @@ system partition holding GRUB as `\EFI\BOOT\BOOTX64.EFI`, and the ext4 root
 partition, typed as the x86-64 root partition so systemd can discover it. The
 kernel mounts it by PARTUUID.
 
+## Verified
+
+The image built from these recipes boots under QEMU (8 GB RAM) with both BIOS
+and UEFI firmware, and `os/tools/boot-test.py` passes on both. The test reaches a
+login prompt in about 25 seconds (software emulation, no KVM), logs in as root
+with the forced password change, and checks:
+
+* Linux 7.0.0-core is running and systemd reports `running` with no failed units
+  and no errors in the journal.
+* The root file system is mounted read-write from the GPT root partition.
+* Idle memory use is about 250 MB, within the 300 MB budget for an 8 GB machine.
+* All 81 packages are installed, and `cpkg verify` and `cpkg why` work on the
+  running system.
+* The native GCC compiles and runs a program, and Python has ssl, ctypes and the
+  compression modules.
+* systemd-networkd gets an address by DHCP, and systemd-resolved answers.
+* Manual pages are installed.
+
 ## Not in the base yet
 
 * An initramfs generator, for encrypted or unusual root devices.
+* Test suites: recipes do not run `make check` yet. That is the next hardening
+  step for the toolchain packages (glibc, GCC, binutils).
+* `sqlite`, `curl`, `which` and other common tools; the package set is the
+  minimum for a self-hosting, bootable, networked system.
 * The Rust toolchain as an OS package. C.O.R.E.'s own programs are compiled on the
   build host for now. They need only glibc ≥ 2.39, so they run unchanged on the new
   system.

@@ -16,22 +16,27 @@ import subprocess
 import sys
 import time
 
-OVMF = ["/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/ovmf/OVMF.fd", "/usr/share/OVMF/OVMF_CODE.fd"]
+# systemd's shell integration wraps each command in OSC 3008 context sequences;
+# strip those and other terminal escapes before matching output.
+ESCAPES = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+# Combined code+variables images, which -bios can load.
+OVMF = ["/usr/share/ovmf/OVMF.fd", "/usr/share/OVMF/OVMF.fd"]
 
 CHECKS = [
     # (description, command, regex the output must match)
     ("kernel", "uname -r", r"7\.0\.0-core"),
     ("os-release", ". /etc/os-release; echo $NAME", r"C\.O\.R\.E\. OS"),
     ("systemd state", "systemctl is-system-running --wait", r"^(running|degraded)"),
-    ("failed units", "systemctl --failed --no-legend --plain | wc -l; systemctl --failed --no-legend --plain", r"^\d+"),
-    ("journal", "journalctl -b --no-pager -q -p err | tail -n 20; echo journal-ok", r"journal-ok"),
+    ("failed units", "systemctl --failed --no-legend --plain | wc -l; systemctl --failed --no-legend --plain", r"\A0\s*\Z"),
+    ("journal errors (shown, not fatal)", "journalctl -b --no-pager -q -p err -o cat | tail -n 20; echo journal-ok", r"journal-ok"),
     ("root file system", "findmnt -no SOURCE,FSTYPE,OPTIONS /", r"ext4\s+rw"),
     ("memory", "free -m | awk '/Mem:/{print \"used_mb=\"$3}'", r"used_mb=\d+"),
-    ("packages", "cpkg list | wc -l", r"^\s*[6-9]\d\b"),
+    ("packages", "cpkg list | wc -l", r"^\s*81\s*$"),
     ("package integrity", "cpkg verify && echo verify-ok", r"verify-ok"),
     ("library closure", "cpkg why glibc | head -3; echo why-ok", r"why-ok"),
     ("compiler", "printf 'int main(){puts(\"hello from core\");}' > /tmp/t.c && gcc -include stdio.h /tmp/t.c -o /tmp/t && /tmp/t", r"hello from core"),
-    ("python", "python3 -c 'import ssl, sqlite3' 2>&1; python3 -c 'import ssl; print(ssl.OPENSSL_VERSION)'", r"OpenSSL 3\.5"),
+    ("python", "python3 -c 'import ssl, ctypes, bz2, lzma, zlib, readline; print(ssl.OPENSSL_VERSION)'", r"^OpenSSL 3\.5"),
     ("network", "networkctl --no-legend list | head -5; ip -4 -o addr show scope global | head -2", r"inet \d+\."),
     ("dns", "resolvectl status >/dev/null && echo resolved-ok", r"resolved-ok"),
     ("man pages", "man -w ls", r"/usr/share/man/man1/ls\.1"),
@@ -109,15 +114,18 @@ def main():
         con.send(a.new_password + "\n")
         con.expect(r"# ", 120)
         print("logged in as root, password changed")
-        con.send("export TERM=dumb PS1='CORE# '; stty -echo cols 200\n")
+        # The prompt is spelled split in the command so its echo cannot match.
+        con.send("stty -echo cols 200; export TERM=dumb PS1='CO''RE# '\n")
         con.expect(r"CORE# ", 30)
         for desc, command, want in CHECKS:
             con.send(command + "; echo __END__\n")
             out = con.expect(r"__END__\r?\n", 600)
+            out = ESCAPES.sub("", out).replace("\r", "")
             out = out.rsplit("__END__", 1)[0].strip()
             good = re.search(want, out, re.M) is not None
             ok &= good
-            print(f"[{'ok' if good else 'FAIL'}] {desc}: {out[:300]}")
+            print(f"[{'ok' if good else 'FAIL'}] {desc}:")
+            print("    " + out[:1500].replace("\n", "\n    "))
             con.expect(r"CORE# ", 30)
         con.send("systemctl poweroff\n")
         con.proc.wait(timeout=300)

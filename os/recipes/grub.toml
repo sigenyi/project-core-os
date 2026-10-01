@@ -24,9 +24,20 @@ for platform in pc efi; do
     echo depends bli part_gpt > grub-core/extra_deps.lst
     extra=""
     [ "$platform" = efi ] && extra="--target=x86_64"
+    # With binutils 2.46, --image-base puts the ELF headers at the base address,
+    # so the BIOS kernel's code would start 0x74 bytes too late and grub-mkimage
+    # rejects it. GRUB's fallback, -Ttext, places the code itself at the address.
+    if [ "$platform" = pc ]; then
+      export ax_cv_check_ldflags___Wl___image_base_0x400000=no
+    else
+      unset ax_cv_check_ldflags___Wl___image_base_0x400000
+    fi
     ../configure --prefix=/usr --sysconfdir=/etc --disable-efiemu --disable-werror \
       --enable-grub-mkfont=no --with-platform="$platform" $extra
     make
+    if [ "$platform" = pc ]; then
+      readelf -h grub-core/kernel.exec | grep -q 'Entry point address: *0x9000$'
+    fi
     make DESTDIR="$DESTDIR" install
   )
 done

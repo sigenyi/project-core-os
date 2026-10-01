@@ -38,8 +38,11 @@ CPKG=${CPKG:-$here/../../target/release/cpkg}
 
 work=$(mktemp -d "${TMPDIR:-/var/tmp}/core-image.XXXXXX")
 R="$work/root"
-loop=
+loop=''
+dirloop=''
 cleanup() {
+  mountpoint -q "$R/mnt/grub" && umount "$R/mnt/grub" || true
+  [ -n "$dirloop" ] && losetup -d "$dirloop" 2>/dev/null || true
   [ -n "$loop" ] && losetup -d "$loop" 2>/dev/null || true
   mountpoint -q "$R/dev" && umount -l "$R/dev" || true
   rm -rf "$work"
@@ -69,7 +72,7 @@ Name=en* eth*
 DHCP=yes
 EOF
 ln -sfn ../run/systemd/resolve/stub-resolv.conf "$R/etc/resolv.conf"
-chroot "$R" /usr/bin/systemctl enable systemd-networkd.service systemd-resolved.service >/dev/null 2>&1 || true
+chroot "$R" /usr/bin/systemctl enable systemd-networkd.service systemd-resolved.service
 echo "root:$PASSWORD" | chroot "$R" /usr/bin/chpasswd
 # The password must be changed at first login.
 chroot "$R" /usr/bin/chage -d 0 root
@@ -127,14 +130,28 @@ mkfs.ext4 -q -L core-root -U "$ROOT_FSUUID" -O ^metadata_csum_seed -d "$R" \
 dd if="$work/root.img" of="$OUT.tmp" bs=1M oflag=seek_bytes seek="$((root_start * 512))" conv=notrunc,sparse status=none
 
 step "BIOS boot code"
+# grub-bios-setup embeds core.img into the BIOS boot partition. It also insists on
+# identifying the device holding its GRUB directory, so that directory goes on a
+# small loop-mounted file system listed in the device map, next to the target.
 loop=$(losetup --find --show "$OUT.tmp")
-echo "(hd0) $loop" > "$work/grub/device.map"
-mkdir -p "$R/dev"
+truncate -s 16M "$work/grubdir.img"
+mkfs.ext4 -q "$work/grubdir.img"
+dirloop=$(losetup --find --show "$work/grubdir.img")
+mkdir -p "$R/dev" "$R/mnt/grub"
 mount --bind /dev "$R/dev"
-cp -r "$work/grub" "$R/tmp/grub"
-chroot "$R" /usr/bin/grub-bios-setup --directory=/tmp/grub --device-map=/tmp/grub/device.map "$loop"
+mount "$dirloop" "$R/mnt/grub"
+cp "$work/grub/core.img" "$work/grub/boot.img" "$R/mnt/grub/"
+printf '(hd0) %s\n(hd1) %s\n' "$loop" "$dirloop" > "$R/mnt/grub/device.map"
+chroot "$R" /usr/bin/grub-bios-setup --skip-fs-probe --directory=/mnt/grub \
+  --device-map=/mnt/grub/device.map "$loop"
+umount "$R/mnt/grub"
+rmdir "$R/mnt/grub"
 umount -l "$R/dev"
+losetup -d "$dirloop"; dirloop=
 losetup -d "$loop"; loop=
+# The boot sector must now carry GRUB's code and still the protective MBR.
+dd if="$OUT.tmp" bs=512 count=1 status=none | od -An -tx1 -j510 | grep -q '55 aa'
+dd if="$OUT.tmp" bs=512 count=1 status=none | grep -aq 'GRUB'
 
 mv "$OUT.tmp" "$OUT"
 step "Done: $OUT ($SIZE, root PARTUUID $ROOT_PARTUUID)"

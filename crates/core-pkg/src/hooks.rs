@@ -19,6 +19,10 @@ use serde::Deserialize;
 
 pub const HOOK_DIR: &str = "usr/share/cpkg/hooks";
 
+/// Absolute: hooks run with a cleared environment, and Rust resolves the program
+/// with the child's PATH. (/usr/sbin is a link to /usr/bin on C.O.R.E. OS.)
+const CHROOT: &str = "/usr/sbin/chroot";
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Hook {
@@ -106,7 +110,7 @@ pub fn run(hook: &Hook, root: &Path) -> Result<(), String> {
     let status = if root == Path::new("/") {
         Command::new(program).args(&hook.exec[1..]).status()
     } else {
-        Command::new("chroot").arg(root).args(&hook.exec).env_clear().env("PATH", "/usr/bin").status()
+        Command::new(CHROOT).arg(root).args(&hook.exec).env_clear().env("PATH", "/usr/bin").status()
     }
     .map_err(|e| format!("hook {}: {e}", hook.name))?;
     if status.success() { Ok(()) } else { Err(format!("hook {} ({}) failed: {status}", hook.name, hook.description)) }
