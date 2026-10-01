@@ -151,6 +151,29 @@ impl ActionSpec {
     pub fn param(&self, name: &str) -> Option<&'static ParamSpec> {
         self.params.iter().find(|p| p.name == name)
     }
+
+    /// Render an `args` object with keys in catalog order, which is the order the
+    /// grammar requires. (`serde_json::Map` would sort keys alphabetically.)
+    pub fn render_args(&self, args: &serde_json::Map<String, serde_json::Value>) -> String {
+        let fields: Vec<String> = self
+            .params
+            .iter()
+            .filter_map(|p| args.get(p.name).map(|v| format!("{}:{v}", serde_json::Value::from(p.name))))
+            .collect();
+        format!("{{{}}}", fields.join(","))
+    }
+
+    /// The documented example as a complete intent line in grammar order.
+    pub fn example_intent(&self, thought: &str) -> String {
+        let args: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(self.example).expect("catalog examples are valid JSON objects");
+        format!(
+            r#"{{"thought":{},"action":"{}","args":{}}}"#,
+            serde_json::Value::from(thought),
+            self.name,
+            self.render_args(&args)
+        )
+    }
 }
 
 const fn req(name: &'static str, kind: ParamKind, doc: &'static str) -> ParamSpec {
@@ -417,6 +440,19 @@ mod tests {
             for p in spec.params.iter().filter(|p| p.required) {
                 assert!(obj.contains_key(p.name), "{}: example misses required {}", spec.name, p.name);
             }
+        }
+    }
+
+    #[test]
+    fn example_intents_keep_catalog_key_order() {
+        let spec = find("read_logs").unwrap();
+        assert_eq!(
+            spec.example_intent("why"),
+            r#"{"thought":"why","action":"read_logs","args":{"unit":"NetworkManager","priority":"warning","lines":40}}"#
+        );
+        for spec in CATALOG {
+            let intent = crate::Intent::parse(&spec.example_intent("t")).unwrap();
+            assert_eq!(intent.action, spec.name);
         }
     }
 
