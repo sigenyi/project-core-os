@@ -168,8 +168,16 @@ pub fn analyse(destdir: &Path, files: &[FileEntry], manifest: &mut Manifest) -> 
         if f.kind == FileKind::File && (f.mode & 0o111 != 0 || p.contains(".so")) {
             if let Some(info) = elf::dynamic_info(&destdir.join(p)) {
                 needed.extend(info.needed);
-                if let Some(s) = info.soname {
-                    sonames.insert(s);
+                match info.soname {
+                    Some(s) => {
+                        sonames.insert(s);
+                    }
+                    // A shared library without a SONAME (perl's libperl.so) is found
+                    // by file name, which is what dependents then record as NEEDED.
+                    None if info.interpreter.is_none() && p.rsplit('/').next().is_some_and(|n| n.contains(".so")) => {
+                        sonames.insert(p.rsplit('/').next().unwrap_or(p).to_string());
+                    }
+                    None => {}
                 }
             }
         }
@@ -367,6 +375,29 @@ pub mod tests {
         fs::write(dir.join("etc/hello.conf"), "greeting=hi\n").unwrap();
         fs::write(dir.join("usr/share/man/man1/hello.1"), ".TH HELLO 1\n").unwrap();
         fs::write(dir.join("usr/lib/systemd/system/hello.service"), "[Service]\n").unwrap();
+    }
+
+    #[test]
+    fn library_without_soname_is_provided_by_file_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        let lib_dir = d.join("usr/lib/perl5/CORE");
+        fs::create_dir_all(&lib_dir).unwrap();
+        fs::write(d.join("x.c"), "int x(void) { return 1; }\n").unwrap();
+        let built = std::process::Command::new("cc")
+            .args(["-shared", "-fPIC", "-o"])
+            .arg(lib_dir.join("libperl.so"))
+            .arg(d.join("x.c"))
+            .status();
+        if !built.is_ok_and(|s| s.success()) {
+            eprintln!("no C compiler; skipping");
+            return;
+        }
+        fs::remove_file(d.join("x.c")).unwrap();
+        let mut m = manifest("perl", "5.40");
+        let files = scan_tree(d).unwrap();
+        analyse(d, &files, &mut m).unwrap();
+        assert!(m.provides.libraries.contains(&"libperl.so".to_string()), "{:?}", m.provides.libraries);
     }
 
     #[test]

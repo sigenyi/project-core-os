@@ -97,7 +97,11 @@ impl Builder {
             return Ok(false);
         }
         if r.build.stage == Stage::Final {
-            // The package must still be installed at that version.
+            // The package must still be in the repository and installed at that
+            // version.
+            if !self.repo().join(r.manifest(0).file_name()).is_file() {
+                return Ok(false);
+            }
             let db = Db::open(&self.root())?;
             let id = format!("{}-{}", r.package.version, r.package.release);
             return Ok(db
@@ -146,6 +150,8 @@ impl Builder {
         if self.up_to_date(r)? {
             return Ok(Outcome::UpToDate);
         }
+        // Until this build succeeds, the recipe is not built.
+        let _ = fs::remove_file(self.stamp_path(r));
         source::fetch(r, &self.cache)?;
         let root = self.root();
         fs::create_dir_all(&root).map_err(io(&root))?;

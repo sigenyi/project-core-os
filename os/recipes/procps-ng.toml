@@ -13,8 +13,12 @@ file = "procps_4.0.4.orig.tar.xz"
 
 [build]
 script = '''
+# Our ncurses is built wide-character only and installs its headers directly in
+# /usr/include, so <ncurses.h> is the wide header Debian puts in ncursesw/.
+sed -i 's|<ncursesw/ncurses.h>|<ncurses.h>|' src/watch.c
+if grep -q 'ncursesw/ncurses.h' src/watch.c; then exit 1; fi
 ./configure --prefix=/usr --docdir=/usr/share/doc/procps-ng-4.0.4 --disable-static \
-  --enable-watch8bit --with-systemd
+  --disable-kill --enable-watch8bit --with-systemd
 make src_w_LDADD='$(LDADD) -lsystemd'
 make DESTDIR="$DESTDIR" install
 '''

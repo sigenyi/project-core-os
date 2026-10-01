@@ -42,6 +42,10 @@ order = 60
 HOOK
 '''
 
+[runtime]
+# systemd loads these with dlopen(), which ELF analysis cannot see.
+depends = ["util-linux", "libcap", "kmod", "libseccomp", "acl", "libxcrypt", "xz", "zstd", "lz4"]
+
 [ai]
 kind = "service"
 launch = "systemctl"
