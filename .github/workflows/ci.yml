@@ -11,7 +11,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  # Keep in sync with image/scripts/build-llama.sh.
+  # llama.cpp release used to validate the grammar and the end-to-end path.
   LLAMA_REF: b11312
 
 jobs:
@@ -29,11 +29,25 @@ jobs:
       - run: cargo test --workspace --locked
 
   scripts:
-    name: shellcheck
+    name: shellcheck, python tools
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck -x system/*.sh image/*.sh image/scripts/*.sh tools/*/*.sh image/profile/profiledef.append.sh
+      - run: shellcheck -x os/tools/*.sh tools/*/*.sh
+      - run: python3 -m py_compile os/tools/*.py os/recipes/ca-certificates/*.py
+
+  recipes:
+    name: OS recipes parse and are complete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The cpkg package takes the binary built here.
+      - run: cargo build -q --release -p core-pkg
+      # Loads every recipe in os/bootstrap and os/recipes, checks names, checksums,
+      # repository files and that ORDER lists each recipe exactly once.
+      - run: cargo run -q -p core-build -- --work "$RUNNER_TEMP/w" --recipes os status
 
   llama:
     name: grammar and end-to-end against llama.cpp

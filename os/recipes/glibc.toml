@@ -30,6 +30,8 @@ mkdir -p "$DESTDIR/etc"
 touch "$DESTDIR/etc/ld.so.conf"
 make DESTDIR="$DESTDIR" install
 sed '/RTLDLIST=/s@/usr@@g' -i "$DESTDIR/usr/bin/ldd"
+# /etc/rpc belongs to netbase, with the other network databases.
+rm -f "$DESTDIR/etc/rpc"
 rm -f "$DESTDIR/etc/ld.so.cache"
 # Locales: C.UTF-8 is the system default; en_US.UTF-8 for programs that expect it.
 mkdir -p "$DESTDIR/usr/lib/locale"

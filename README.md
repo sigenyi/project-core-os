@@ -21,8 +21,13 @@ destructive asks you first.)*
 
 ## The idea
 
-* **No UI.** No display server, no desktop, no windows. You log in to a text
-  prompt (or press push-to-talk) and say what you want.
+* **No UI.** No desktop, no launcher, no windows to manage. You log in to a text
+  prompt (or press push-to-talk) and say what you want. When you ask for a
+  graphical program, the AI brings up just that program, full screen, and you
+  return to the conversation when you close it.
+* **Its own distribution.** Built from source with its own builder (`core-build`)
+  and package manager (`cpkg`), whose packages describe themselves to the AI:
+  what they provide, how to launch them, and why they are installed.
 * **Local AI.** A 4-8B parameter model runs on the machine through llama.cpp. No
   cloud: the OS has to be able to fix the network when there is no network.
 * **Untrusted AI, trusted executor.** The model can only emit one JSON intent from
@@ -39,7 +44,7 @@ destructive asks you first.)*
             ▲  ▲            │   ▲
  confirm ───┘  │     intent │   │ observation               core-sensed
                │            ▼   │                     (procfs/sysfs/kmsg → insights)
-               │       core-guardian (root) ──argv──▶ systemctl, pacman, nmcli, …
+               │       core-guardian (root) ──argv──▶ systemctl, cpkg, networkctl, …
                └──────── validate · policy · confirm · plan · execute · audit
 ```
 
@@ -51,10 +56,13 @@ destructive asks you first.)*
 | [`core-agent`](crates/core-agent) | The control loop, llama.cpp and rescue backends, prompts, voice |
 | [`core-shell`](crates/core-shell) | The login shell: the system's entire interface |
 | [`core-ctl`](crates/core-ctl) | Admin tool: `doctor`, `exec`, `audit`, `grammar`, `catalog`, … |
-| [`system/`](system) | systemd units, configs, installer for existing distros |
-| [`image/`](image) | archiso-based ISO builder (portable llama.cpp/whisper.cpp, models) |
+| [`core-pkg`](crates/core-pkg) | `cpkg`, the package manager: signed repositories, transactional installs, JSON output |
+| [`core-build`](crates/core-build) | Builds the OS from pinned sources: cross toolchain, chroot builds, packaging |
+| [`os/`](os) | Recipes for the bootstrap and the base system, image and boot-test tools |
+| [`system/`](system) | systemd units and configuration for the C.O.R.E. services |
 
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and how it relates
+Read [docs/BASE-OS.md](docs/BASE-OS.md) for how the distribution is built,
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and how it relates
 to the original blueprint, [docs/SECURITY.md](docs/SECURITY.md) for the threat
 model, [docs/MODELS.md](docs/MODELS.md) for model choice and sizing, and
 [docs/ROADMAP.md](docs/ROADMAP.md) for what comes next.
@@ -69,29 +77,27 @@ cargo run -p core-shell -- --dev --backend rescue        # rule-based, no model 
 cargo run -p core-shell -- --dev --llama-url http://127.0.0.1:8080   # with llama-server
 ```
 
-**On an Arch Linux VM** (or another systemd distro). This makes `core` a
-conversational user and boots to the console:
+**Build the base OS from source** (Linux build host, root, about 25 GB of disk
+and several hours; details in [docs/BASE-OS.md](docs/BASE-OS.md)):
 
 ```sh
-sudo system/install.sh --user core --autologin --disable-gui \
-     --with-llama --with-whisper --with-models --allow-unpinned
-core-ctl doctor
-```
-
-**As a bootable ISO** (Arch host, or any host with podman/docker):
-
-```sh
-sudo image/build-iso.sh --allow-unpinned        # or: image/build-in-container.sh
-image/run-qemu.sh                               # boots straight into the prompt
+cargo build --release -p core-build -p core-pkg
+B="./target/release/core-build --work /var/tmp/core-build --cache /var/cache/core-build/sources"
+$B fetch && $B bootstrap && $B world && $B index --key ~/core-keys/core.key
+sudo os/tools/mkimage.sh --repo /var/tmp/core-build/repo --key ~/core-keys/core.pub --out core.img
+os/tools/boot-test.py core.img
 ```
 
 ## Status
 
-The foundation is complete and tested: all components, the hardened services, the
-installer and the image build. The grammar is verified against llama.cpp's own
-engine, and an end-to-end test drives the full loop through a live llama-server.
-The ISO has not been booted on real hardware yet; that is the next phase. See the
-[roadmap](docs/ROADMAP.md).
+* The AI stack (protocol, Guardian, agent, shell, telemetry) is complete and
+  tested, and its grammar is verified against llama.cpp.
+* The base OS is built from source by `core-build` and booted in QEMU by
+  `os/tools/boot-test.py`; see [docs/BASE-OS.md](docs/BASE-OS.md).
+* Next: move the AI stack's package and network actions from the earlier
+  Arch-based prototype (pacman, NetworkManager) to `cpkg` and systemd-networkd,
+  package it for the base OS, and build the standalone graphical sessions. See the
+  [roadmap](docs/ROADMAP.md).
 
 ## Development
 

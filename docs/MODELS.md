@@ -9,10 +9,9 @@ Two local models are used:
 | Reasoning (`core.gguf`) | llama.cpp `llama-server` | Qwen3-4B-Instruct-2507, Q4_K_M | ~2.5 GB | ~3.5 GB with 8K context |
 | Speech-to-text (`whisper.bin`) | whisper.cpp `whisper-cli` | ggml-base (multilingual) | ~150 MB | only while transcribing |
 
-Both are listed in [`image/models.conf`](../image/models.conf) and fetched with
-`image/scripts/fetch-models.sh`, which verifies SHA-256 checksums. **The checksums
-in the manifest are not pinned yet.** The first fetch prints them; pin them before
-publishing an image.
+On C.O.R.E. OS the runtimes and the models will be ordinary cpkg packages, with the
+model files pinned by SHA-256 like every other source (roadmap, phase 2). Until
+then they are installed by hand on development machines.
 
 ## Choosing a reasoning model
 
@@ -53,7 +52,7 @@ budgets prompts against it.
 
 ## GPU offload
 
-Build llama.cpp with `--vulkan` (`image/build-iso.sh --vulkan`) and set
+Build llama.cpp with Vulkan (`-DGGML_VULKAN=ON`) and set
 `CORE_GPU_LAYERS=99` in `/etc/core/inference.env`. Vulkan covers AMD, Intel and
 NVIDIA GPUs through Mesa or the vendor drivers. The service already allows access
 to DRM render nodes. ROCm or the proprietary NVIDIA stack need a drop-in adding

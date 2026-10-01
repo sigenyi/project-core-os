@@ -10,8 +10,12 @@ crates/
   core-agent/      orchestrator library: control loop, backends, prompts, voice
   core-shell/      the login shell (console UI)
   core-ctl/        admin and diagnostics CLI
-system/            root filesystem overlay: units, configs, install scripts
-image/             archiso profile and ISO build scripts
+  core-pkg/        cpkg, the package manager
+  core-build/      builds the OS from recipes
+os/bootstrap/      recipes: cross toolchain and temporary tools
+os/recipes/        recipes: the base system packages
+os/tools/          source lookup, image assembly, QEMU boot test
+system/            units and configuration for the C.O.R.E. services
 tools/gbnf-check/  validates the grammar with llama.cpp's GBNF engine
 tools/e2e/         end-to-end test against a live llama-server
 docs/              architecture, security, models, roadmap

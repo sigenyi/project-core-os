@@ -155,11 +155,11 @@ which is what `core-shell --dev` uses on development machines.
 ## Boot and session
 
 ```
-firmware → kernel + initramfs (archiso, kms hook) → systemd
+firmware → GRUB → kernel (root drivers built in, no initramfs) → systemd
    ├─ core-guardian.socket   (root-owned socket, group core, 0660)
    ├─ core-sensed.service    (telemetry)
    ├─ core-inference.service (llama-server, loopback only)
-   ├─ NetworkManager.service
+   ├─ systemd-networkd / systemd-resolved
    └─ getty@tty1 → autologin core → /usr/bin/core-shell
 ```
 
@@ -185,8 +185,8 @@ messages do not overwrite the conversation. They still reach the journal and
 
 | Blueprint | Built | Reason |
 |---|---|---|
-| Slint UI rendered via KMS/DRM | Plain console text, no graphics stack | The project's one rule is no UI. KMS is still used for the framebuffer console. |
-| Linux From Scratch base | Arch Linux via archiso for v1 | "Install a web browser" needs a package manager and maintained repositories. An LFS-derived minimal base is on the roadmap. |
+| Slint UI rendered via KMS/DRM | Plain console text; graphical programs run alone in a kiosk session | The project's one rule is no UI. When the user asks for a graphical program, the AI shows only that program, full screen. |
+| Linux From Scratch base | Our own distribution, bootstrapped the LFS way, with our own builder and package manager | See [BASE-OS.md](BASE-OS.md). (An early prototype used Arch Linux; it was removed because C.O.R.E. OS must be its own product.) |
 | eBPF telemetry | procfs/sysfs/kmsg collectors behind a `Collector` trait | Covers the hardware, driver and log state the agent needs today without BTF/`CAP_BPF` requirements. eBPF event collectors (OOM kills, exec failures, packet drops) plug into the same trait later. |
 | Telemetry JSON appended to the prompt | Compact text summary plus on-demand JSON sections | Small context windows. The summary costs about 200 tokens; detail is fetched only when needed. |
 | Retry "until the issue is resolved" | Bounded retries, no identical repeats, forced final explanation | Unbounded autonomous retries by a fallible model are a reliability and safety hazard. |

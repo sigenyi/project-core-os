@@ -11,7 +11,20 @@ urls = ["https://archive.ubuntu.com/ubuntu/pool/main/b/bc/bc_1.07.1.orig.tar.gz"
 
 [build]
 script = '''
+# bc post-processes its math library with ed(1), which the base system does not
+# ship; this does the same edits with sed.
+cat > bc/fix-libmath_h <<'FIX'
+sed -i -e '1s/^/{"/' -e 's/$/",/' -e '2,$s/^/"/' libmath.h
+sed -i '$d' libmath.h
+sed -i '$s/,$/,0}/' libmath.h
+FIX
 ./configure --prefix=/usr --with-readline
 make
 make DESTDIR="$DESTDIR" install
+echo '2^64; scale=20; 4*a(1)' | "$DESTDIR/usr/bin/bc" -l | grep -q '^3\.14159265358979323844'
 '''
+
+[ai]
+kind = "cli"
+launch = "bc"
+keywords = ["calculator", "math"]

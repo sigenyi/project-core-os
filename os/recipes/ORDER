@@ -22,8 +22,6 @@ mpc
 attr
 acl
 libcap
-libxcrypt
-shadow
 gcc
 ncurses
 sed
@@ -40,6 +38,8 @@ less
 perl
 autoconf
 automake
+libxcrypt
+shadow
 expat
 perl-xml-parser
 intltool
