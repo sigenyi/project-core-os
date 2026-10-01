@@ -118,7 +118,9 @@ impl Builder {
         self.use_rule("ws");
         let body = self.sequence(spec.params, false);
         let args = if body.is_empty() { r#""{}""#.to_string() } else { format!(r#""{{" ws {body} ws "}}""#) };
-        format!(r#""\"action\":" ws "\"{}\"," ws "\"args\":" ws {args}"#, spec.name)
+        // The `"action":"` prefix is shared in `root`; alternatives start at the name,
+        // so the sampler tracks one grammar stack per *plausible* action, not all of them.
+        format!(r#""{}\"," ws "\"args\":" ws {args}"#, spec.name)
     }
 }
 
@@ -153,10 +155,11 @@ pub fn gbnf(options: &GrammarOptions) -> String {
     writeln!(out, "# C.O.R.E. OS intent grammar (generated from the action catalog; do not edit)").unwrap();
     if options.thought_max > 0 {
         b.use_rule("pchar");
-        writeln!(out, r#"root ::= "{{" ws "\"thought\":" ws thought "," ws action ws "}}""#).unwrap();
+        writeln!(out, r#"root ::= "{{" ws "\"thought\":" ws thought "," ws "\"action\":" ws "\"" action ws "}}""#)
+            .unwrap();
         writeln!(out, r#"thought ::= "\"" pchar{{0,{}}} "\"""#, options.thought_max).unwrap();
     } else {
-        writeln!(out, r#"root ::= "{{" ws action ws "}}""#).unwrap();
+        writeln!(out, r#"root ::= "{{" ws "\"action\":" ws "\"" action ws "}}""#).unwrap();
     }
     let names: Vec<String> = specs.iter().map(|s| rule_name(s.name)).collect();
     writeln!(out, "action ::= {}", names.join(" | ")).unwrap();
@@ -247,7 +250,7 @@ mod tests {
         assert!(!g.contains("install"));
         assert!(!g.contains("thought"));
         assert!(!g.contains("v-service"), "unused shared rules are omitted");
-        assert_eq!(rule(&g, "a-disk-usage"), r#""\"action\":" ws "\"disk_usage\"," ws "\"args\":" ws "{}""#);
+        assert_eq!(rule(&g, "a-disk-usage"), r#""disk_usage\"," ws "\"args\":" ws "{}""#);
     }
 
     #[test]
@@ -260,7 +263,7 @@ mod tests {
         let enable = rule(&g, "a-enable-service");
         assert_eq!(
             enable,
-            r#""\"action\":" ws "\"enable_service\"," ws "\"args\":" ws "{" ws "\"service\":" ws v-service ("," ws "\"now\":" ws bool)? ws "}""#
+            r#""enable_service\"," ws "\"args\":" ws "{" ws "\"service\":" ws v-service ("," ws "\"now\":" ws bool)? ws "}""#
         );
     }
 
