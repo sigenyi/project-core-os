@@ -5,6 +5,9 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+/// Absolute, because build scripts run with an empty environment (no PATH).
+pub const CHROOT: &str = "/usr/sbin/chroot";
+
 /// The kernel's virtual filesystems mounted inside the build root, unmounted on drop.
 pub struct Mounts {
     mounted: Vec<PathBuf>,
@@ -85,7 +88,7 @@ pub fn run_script(place: Place, script: &str, env: &[(String, String)], log: &Pa
             c
         }
         Place::Chroot { root, cwd } => {
-            let mut c = Command::new("chroot");
+            let mut c = Command::new(CHROOT);
             c.arg(root).arg("/usr/bin/env").arg("-i");
             for (k, v) in env {
                 c.arg(format!("{k}={v}"));

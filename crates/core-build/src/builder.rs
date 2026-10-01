@@ -21,7 +21,7 @@ use core_pkg::archive::{create_package, sha256_bytes};
 use core_pkg::db::Db;
 use core_pkg::transaction::{self, Options, Report};
 
-use crate::env::{Mounts, Place, run_script};
+use crate::env::{CHROOT, Mounts, Place, run_script};
 use crate::post;
 use crate::recipe::{Recipe, Stage};
 use crate::source;
@@ -249,7 +249,7 @@ impl Builder {
     /// Run an interactive shell inside the build root.
     pub fn shell(&mut self) -> Result<(), String> {
         self.ensure_mounts()?;
-        let mut cmd = Command::new("chroot");
+        let mut cmd = Command::new(CHROOT);
         cmd.arg(self.root()).arg("/usr/bin/env").arg("-i");
         for (k, v) in self.base_env() {
             cmd.arg(format!("{k}={v}"));

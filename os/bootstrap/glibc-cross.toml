@@ -12,6 +12,13 @@ file = "glibc_2.43.orig.tar.xz"
 [build]
 stage = "cross"
 script = '''
+# Linux 7.0's <linux/mount.h> spells OPEN_TREE_CLONE as (1 << 0); glibc 2.43
+# defines it textually differently, which is a redefinition error. Only define
+# the open_tree flags when the kernel header has not.
+sed -i -e 's|^#define OPEN_TREE_CLONE    1 .*|#ifndef OPEN_TREE_CLONE\n# define OPEN_TREE_CLONE 1\n#endif|' \
+       -e 's|^#define OPEN_TREE_CLOEXEC  O_CLOEXEC .*|#ifndef OPEN_TREE_CLOEXEC\n# define OPEN_TREE_CLOEXEC O_CLOEXEC\n#endif|' \
+  sysdeps/unix/sysv/linux/sys/mount.h
+grep -q '^#ifndef OPEN_TREE_CLONE' sysdeps/unix/sysv/linux/sys/mount.h
 mkdir build && cd build
 echo "rootsbindir=/usr/sbin" > configparms
 ../configure --prefix=/usr --host="$LFS_TGT" --build="$(../scripts/config.guess)" \

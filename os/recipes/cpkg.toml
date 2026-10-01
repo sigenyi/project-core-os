@@ -1,0 +1,26 @@
+[package]
+name = "cpkg"
+version = "0.1.0"
+summary = "The C.O.R.E. OS package manager"
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/sigenyi/project-core-os"
+
+[build]
+# Built from crates/core-pkg on the build host (`cargo build --release -p core-pkg`)
+# until the Rust toolchain itself is part of the system.
+files = ["../../target/release/cpkg"]
+script = '''
+install -Dm755 cpkg "$DESTDIR/usr/bin/cpkg"
+install -d "$DESTDIR/etc/cpkg/keys" "$DESTDIR/var/lib/cpkg" "$DESTDIR/var/cache/cpkg"
+cat > "$DESTDIR/etc/cpkg/repos.toml" <<CONF
+# Package repositories, tried in order. Every index must be signed by a key
+# in /etc/cpkg/keys.
+# [[repo]]
+# location = "https://example.org/core/x86_64"
+CONF
+'''
+
+[ai]
+kind = "cli"
+launch = "cpkg"
+keywords = ["install software", "remove program", "package manager", "update system"]

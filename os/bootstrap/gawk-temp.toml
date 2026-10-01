@@ -12,6 +12,10 @@ file = "gawk_5.3.2.orig.tar.xz"
 [build]
 stage = "cross"
 script = '''
+# Ubuntu's tarball omits the GFDL manual sources: build the man pages only, and
+# skip awklib, whose example programs are extracted from the manual.
+sed -i 's/ doc awklib po / doc po /' Makefile.in
+sed -i -e '/^INFO_DEPS = .*\\$/,/[^\\]$/d' -e '/^TEXINFO_TEX = /i INFO_DEPS =' doc/Makefile.in
 sed -i 's/extras//' Makefile.in
 ./configure --prefix=/usr --host="$LFS_TGT" --build="$(build-aux/config.guess)"
 make

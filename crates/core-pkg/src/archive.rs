@@ -48,7 +48,8 @@ pub fn sha256_bytes(data: &[u8]) -> String {
 /// Scan a staged install tree into a sorted file list.
 pub fn scan_tree(destdir: &Path) -> Result<Vec<FileEntry>, String> {
     let mut entries = Vec::new();
-    let mut seen_inodes: HashMap<(u64, u64), String> = HashMap::new();
+    // Paths of multiply-linked files and their inode.
+    let mut links: HashMap<String, (u64, u64)> = HashMap::new();
     let mut stack = vec![PathBuf::new()];
     while let Some(rel) = stack.pop() {
         let dir = destdir.join(&rel);
@@ -84,20 +85,8 @@ pub fn scan_tree(destdir: &Path) -> Result<Vec<FileEntry>, String> {
                     target,
                 });
             } else if ft.is_file() {
-                let key = (meta.dev(), meta.ino());
                 if meta.nlink() > 1 {
-                    if let Some(first) = seen_inodes.get(&key) {
-                        entries.push(FileEntry {
-                            path: path_str,
-                            kind: FileKind::Hardlink,
-                            mode,
-                            size: 0,
-                            sha256: String::new(),
-                            target: first.clone(),
-                        });
-                        continue;
-                    }
-                    seen_inodes.insert(key, path_str.clone());
+                    links.insert(path_str.clone(), (meta.dev(), meta.ino()));
                 }
                 let sha256 = sha256_file(&child.path()).map_err(|e| e.to_string())?;
                 entries.push(FileEntry {
@@ -114,11 +103,21 @@ pub fn scan_tree(destdir: &Path) -> Result<Vec<FileEntry>, String> {
         }
     }
     entries.sort_by(|a, b| a.path.cmp(&b.path));
-    // A hard link's target must precede it in the archive.
-    let order: HashMap<String, usize> = entries.iter().enumerate().map(|(i, e)| (e.path.clone(), i)).collect();
-    for e in entries.iter_mut().filter(|e| e.kind == FileKind::Hardlink) {
-        if order[&e.target] > order[&e.path] {
-            return Err(format!("hard link {} precedes its target {}", e.path, e.target));
+    // Within each group of hard links, the first path in archive order carries the
+    // data and the others link to it (an extractor needs the target first).
+    let mut first_of: HashMap<(u64, u64), String> = HashMap::new();
+    for e in entries.iter_mut() {
+        let Some(key) = links.get(&e.path) else { continue };
+        match first_of.get(key) {
+            None => {
+                first_of.insert(*key, e.path.clone());
+            }
+            Some(first) => {
+                e.kind = FileKind::Hardlink;
+                e.size = 0;
+                e.sha256 = String::new();
+                e.target = first.clone();
+            }
         }
     }
     Ok(entries)
@@ -368,6 +367,25 @@ pub mod tests {
         fs::write(dir.join("etc/hello.conf"), "greeting=hi\n").unwrap();
         fs::write(dir.join("usr/share/man/man1/hello.1"), ".TH HELLO 1\n").unwrap();
         fs::write(dir.join("usr/lib/systemd/system/hello.service"), "[Service]\n").unwrap();
+    }
+
+    #[test]
+    fn hard_link_groups_follow_archive_order() {
+        // glibc installs usr/libexec/getconf/* first and links usr/bin/getconf to
+        // one of them; usr/bin sorts first, so it must carry the data.
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        fs::create_dir_all(d.join("usr/libexec/getconf")).unwrap();
+        fs::create_dir_all(d.join("usr/bin")).unwrap();
+        fs::write(d.join("usr/libexec/getconf/POSIX_V7"), "data").unwrap();
+        fs::hard_link(d.join("usr/libexec/getconf/POSIX_V7"), d.join("usr/bin/getconf")).unwrap();
+        fs::hard_link(d.join("usr/libexec/getconf/POSIX_V7"), d.join("usr/libexec/getconf/XBS5")).unwrap();
+        let files = scan_tree(d).unwrap();
+        let get = |p: &str| files.iter().find(|f| f.path == p).unwrap();
+        assert_eq!(get("usr/bin/getconf").kind, FileKind::File);
+        for p in ["usr/libexec/getconf/POSIX_V7", "usr/libexec/getconf/XBS5"] {
+            assert_eq!((get(p).kind, get(p).target.as_str()), (FileKind::Hardlink, "usr/bin/getconf"));
+        }
     }
 
     #[test]

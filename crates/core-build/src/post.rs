@@ -12,6 +12,8 @@ use std::process::Command;
 
 use core_pkg::elf;
 
+use crate::env::CHROOT;
+
 const MOVES: &[(&str, &str)] = &[
     ("bin", "usr/bin"),
     ("sbin", "usr/bin"),
@@ -184,7 +186,7 @@ pub fn strip(dest: &Path, root: &Path) -> Result<usize, String> {
     for (flag, list) in [("--strip-debug", debug_only), ("--strip-unneeded", unneeded)] {
         for chunk in list.chunks(200) {
             // strip processes every file even when some fail (e.g. a script named .a).
-            let out = Command::new("chroot")
+            let out = Command::new(CHROOT)
                 .arg(root)
                 .arg("/usr/bin/strip")
                 .arg(flag)

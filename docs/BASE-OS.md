@@ -29,8 +29,28 @@ Recipes pin every source by SHA-256. The primary URL is always the upstream rele
 Mirrors are listed after it. The build machine used so far cannot reach most upstream
 hosts, so the mirror used in practice is Ubuntu's archive copy of the same upstream
 release tarball (`<package>_<version>.orig.tar.*`, listed in its GPG-signed index).
-`os/tools/ubuntu-orig.py` looks those up. Only the upstream tarball is used: no
-Debian or Ubuntu patches, packaging or binaries.
+`os/tools/ubuntu-orig.py` looks those up, and `os/tools/source-block.py` turns them
+into a recipe's `[[source]]` block. Only the upstream tarball is used: no Debian or
+Ubuntu patches, packaging or binaries.
+
+A few of those tarballs are repacked by Debian, not byte-identical to upstream:
+
+* `+dfsg` releases (gmp, make, tar, bison) and gawk drop the GNU Free Documentation
+  License manuals. Their recipes say so and build without the Texinfo manual (man
+  pages are kept). gmp and make lose their `doc/` directory entirely.
+* GCC is wrapped: the orig tarball contains the upstream `gcc-15.2.0.tar.xz`, which
+  recipes unpack with `inner`.
+* expat is a snapshot of the upstream git tag; its recipe runs `buildconf.sh`.
+
+Those recipes list only the archive URL, since the upstream file has a different
+checksum.
+
+## Fixes to upstream sources
+
+| Package | Problem | Fix |
+|---|---|---|
+| glibc 2.43 | `<sys/mount.h>` redefines `OPEN_TREE_CLONE`, which Linux 7.0's `<linux/mount.h>` now spells `(1 << 0)`; glibc builds with `-Werror` | Define the `open_tree` flags only when the kernel header has not |
+| binutils 2.46 (temporary) | libtool would link libctf against the host's libraries | Drop `$add_dir` in `ltmain.sh`, as Linux From Scratch does |
 
 ## Build stages
 
@@ -44,6 +64,44 @@ Debian or Ubuntu patches, packaging or binaries.
 4. **Image.** A fresh root filesystem is assembled with `cpkg install --root` from
    the packages alone, so no build leftovers can reach it. Then it is configured,
    written to an ext4 partition, and made bootable with GRUB.
+
+## Building it
+
+Requirements on the build machine: root, a C/C++ compiler, GNU make, bison, gawk,
+m4, perl, python3, texinfo, xz, and for the image `sfdisk`, `mkfs.ext4`,
+`mkfs.vfat` and mtools. About 25 GB of disk.
+
+```sh
+cargo build --release -p core-build -p core-pkg
+B="./target/release/core-build --work /var/tmp/core-build --cache /var/cache/core-build/sources"
+$B fetch          # download and verify every source
+$B bootstrap      # cross toolchain + temporary tools (os/bootstrap)
+$B world          # every package of the base system (os/recipes)
+$B index --key /path/outside/the/repo/core.key   # sign the repository index
+sudo os/tools/mkimage.sh --repo /var/tmp/core-build/repo \
+     --key /path/outside/the/repo/core.pub --out core.img
+os/tools/boot-test.py core.img            # BIOS
+os/tools/boot-test.py core.img --uefi     # UEFI
+```
+
+`core-build` skips recipes whose stamp matches the recipe (and any files it brings
+in), so an interrupted build resumes where it stopped; `--force` rebuilds. Logs go
+to `<work>/logs/<recipe>.log`.
+
+Recipe scripts are TOML literal strings (`'''`), so shell line continuations and
+backslashes reach bash unchanged.
+
+## The image
+
+`mkimage.sh` installs the packages into an empty directory with `cpkg --root`,
+which runs the package hooks (library cache, system users, hardware database,
+service presets). It then adds what is specific to one machine: the trusted
+repository key, network configuration (DHCP on wired interfaces through
+systemd-networkd), an empty machine ID, and the root password. That password must
+be changed at first login. The disk is GPT with a BIOS boot partition, an EFI
+system partition holding GRUB as `\EFI\BOOT\BOOTX64.EFI`, and the ext4 root
+partition, typed as the x86-64 root partition so systemd can discover it. The
+kernel mounts it by PARTUUID.
 
 ## Not in the base yet
 
