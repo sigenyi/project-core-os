@@ -215,6 +215,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-build"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "core-pkg",
+ "core-protocol",
+ "libc",
+ "log",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "core-ctl"
 version = "0.1.0"
 dependencies = [
