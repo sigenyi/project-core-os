@@ -73,7 +73,17 @@ impl Builder {
     }
 
     fn recipe_hash(r: &Recipe) -> Result<String, String> {
-        let text = fs::read(&r.path).map_err(io(&r.path))?;
+        let mut text = fs::read(&r.path).map_err(io(&r.path))?;
+        // Files brought in from the repository count as part of the recipe.
+        for rel in &r.build.files {
+            let out = Command::new("tar")
+                .args(["--sort=name", "--mtime=@0", "--owner=0", "--group=0", "--numeric-owner", "-cf", "-", "-C"])
+                .arg(r.local_file(rel).parent().unwrap())
+                .arg(r.local_file(rel).file_name().unwrap())
+                .output()
+                .map_err(|e| e.to_string())?;
+            text.extend_from_slice(&out.stdout);
+        }
         Ok(sha256_bytes(&text))
     }
 
@@ -196,7 +206,9 @@ impl Builder {
 
     fn package_and_install(&self, r: &Recipe, dest: &Path, log: &Path) -> Result<(), String> {
         let root = self.root();
-        post::normalize_merged_usr(dest).map_err(|e| format!("{}: {e}", r.package.name))?;
+        if r.build.merge_usr {
+            post::normalize_merged_usr(dest).map_err(|e| format!("{}: {e}", r.package.name))?;
+        }
         post::remove_clutter(dest)?;
         if r.build.strip {
             let n = post::strip(dest, &root)?;

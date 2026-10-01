@@ -1,0 +1,25 @@
+[package]
+name = "kbd"
+version = "2.7.1"
+summary = "Console keyboard and font tools"
+license = "GPL-2.0-or-later"
+homepage = "https://kbd-project.org/"
+
+[[source]]
+sha256 = "1fd74ac647c5ba5b3ebe09a204483544c5f1ef89ff42f37a11eab040cac9595d"
+urls = ["https://www.kernel.org/pub/linux/utils/kbd/kbd-2.7.1.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/k/kbd/kbd_2.7.1.orig.tar.gz"]
+file = "kbd_2.7.1.orig.tar.gz"
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-vlock
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "ip"
+keywords = ["network", "ip address", "routes", "sockets"]
+

@@ -1,0 +1,5 @@
+NAME="C.O.R.E. OS"
+ID=core
+PRETTY_NAME="C.O.R.E. OS (base)"
+VERSION_ID=0.1
+HOME_URL="https://github.com/sigenyi/project-core-os"

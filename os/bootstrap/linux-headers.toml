@@ -1,0 +1,18 @@
+[package]
+name = "linux-headers"
+version = "7.0"
+summary = "Linux kernel API headers"
+
+[[source]]
+sha256 = "c6343795c8c7e4feff55f5b309365c8e0eaf49cd6abcb412e32315313f149536"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/l/linux/linux_7.0.0.orig.tar.gz"]
+
+[build]
+stage = "cross"
+script = '''
+make mrproper
+make headers
+find usr/include -type f ! -name '*.h' -delete
+mkdir -p "$LFS/usr"
+cp -r usr/include "$LFS/usr"
+'''

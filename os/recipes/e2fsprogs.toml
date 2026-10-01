@@ -1,0 +1,28 @@
+[package]
+name = "e2fsprogs"
+version = "1.47.2"
+summary = "ext2/3/4 file system tools"
+license = "GPL-2.0-only AND LGPL-2.0-only"
+homepage = "https://e2fsprogs.sourceforge.net/"
+
+[[source]]
+sha256 = "6dcd67ff9d8b13274ba3f088e4318be4f5b71412cd863524423fc49d39a6371f"
+urls = ["https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.2/e2fsprogs-1.47.2.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/e/e2fsprogs/e2fsprogs_1.47.2.orig.tar.gz"]
+file = "e2fsprogs_1.47.2.orig.tar.gz"
+
+[build]
+script = '''
+mkdir build && cd build
+../configure --prefix=/usr --sysconfdir=/etc --enable-elf-shlibs --disable-libblkid \
+  --disable-libuuid --disable-uuidd --disable-fsck
+make
+make DESTDIR="$DESTDIR" install
+rm -f "$DESTDIR"/usr/lib/{libcom_err,libe2p,libext2fs,libss}.a
+'''
+
+[ai]
+kind = "tui"
+launch = "top"
+keywords = ["processes", "memory usage", "cpu usage", "task manager", "kill"]
+

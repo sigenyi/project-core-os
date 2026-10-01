@@ -1,0 +1,39 @@
+[package]
+name = "linux"
+version = "7.0"
+summary = "Linux kernel and modules"
+license = "GPL-2.0-only"
+homepage = "https://www.kernel.org/"
+
+[[source]]
+sha256 = "c6343795c8c7e4feff55f5b309365c8e0eaf49cd6abcb412e32315313f149536"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/l/linux/linux_7.0.0.orig.tar.gz"]
+
+[build]
+files = ["linux/config-fragment"]
+script = '''
+make mrproper
+make defconfig kvm_guest.config
+scripts/kconfig/merge_config.sh -m .config config-fragment
+make olddefconfig
+# Every option we asked for must have survived dependency resolution.
+fail=0
+while IFS= read -r line; do
+  case "$line" in ''|'#'*) continue ;; esac
+  opt=${line%%=*}; val=${line#*=}
+  if [ "$val" = n ]; then
+    grep -q "^$opt=" .config && { echo "$opt should be off"; fail=1; }
+  else
+    grep -qx "$line" .config || { echo "$line did not apply: $(grep "^$opt=" .config || echo unset)"; fail=1; }
+  fi
+done < config-fragment
+[ $fail = 0 ]
+make
+release=$(make -s kernelrelease)
+make INSTALL_MOD_PATH="$DESTDIR/usr" INSTALL_MOD_STRIP=1 modules_install
+rm -f "$DESTDIR/usr/lib/modules/$release/build"
+install -Dm644 arch/x86/boot/bzImage "$DESTDIR/boot/vmlinuz-$release"
+install -Dm644 System.map "$DESTDIR/boot/System.map-$release"
+install -Dm644 .config "$DESTDIR/boot/config-$release"
+ln -sf "vmlinuz-$release" "$DESTDIR/boot/vmlinuz"
+'''

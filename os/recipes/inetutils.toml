@@ -1,0 +1,21 @@
+[package]
+name = "inetutils"
+version = "2.7"
+summary = "Network clients (ping, hostname, ftp, telnet, traceroute)"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/inetutils/"
+
+[[source]]
+sha256 = "a156be1cde3c5c0ffefc262180d9369a60484087907aa554c62787d2f40ec086"
+urls = ["https://ftp.gnu.org/gnu/inetutils/inetutils-2.7.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/i/inetutils/inetutils_2.7.orig.tar.gz"]
+file = "inetutils_2.7.orig.tar.gz"
+
+[build]
+script = '''
+sed -i 's/def HAVE_TERMCAP_TGETENT/ 1/' telnet/telnet.c
+./configure --prefix=/usr --bindir=/usr/bin --localstatedir=/var --disable-logger \
+  --disable-whois --disable-rcp --disable-rexec --disable-rlogin --disable-rsh --disable-servers
+make
+make DESTDIR="$DESTDIR" install
+'''

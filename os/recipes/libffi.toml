@@ -1,0 +1,19 @@
+[package]
+name = "libffi"
+version = "3.5.2"
+summary = "Foreign function interface library"
+license = "MIT"
+homepage = "https://sourceware.org/libffi/"
+
+[[source]]
+sha256 = "dd19253d3007f366319a51d248a40c9e5fcace4498cbea990b566291844e4e30"
+urls = ["https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/libf/libffi/libffi_3.5.2.orig.tar.gz"]
+file = "libffi_3.5.2.orig.tar.gz"
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-static --with-gcc-arch=x86-64
+make
+make DESTDIR="$DESTDIR" install
+'''

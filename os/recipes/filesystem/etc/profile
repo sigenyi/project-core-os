@@ -1,0 +1,7 @@
+# /etc/profile: login shell setup for C.O.R.E. OS.
+export PATH=/usr/local/bin:/usr/bin
+[ "$(id -u)" -eq 0 ] || umask 022
+if [ -f /etc/locale.conf ]; then . /etc/locale.conf; export LANG; fi
+for f in /etc/profile.d/*.sh; do [ -r "$f" ] && . "$f"; done
+unset f
+if [ -n "$BASH_VERSION" ] && [ -r /etc/bash.bashrc ]; then . /etc/bash.bashrc; fi

@@ -1,0 +1,26 @@
+[package]
+name = "libtool"
+version = "2.5.4"
+summary = "Generic library support script"
+license = "GPL-2.0-or-later"
+homepage = "https://www.gnu.org/software/libtool/"
+
+[[source]]
+sha256 = "d9189031edeaa6aa74695b2aeb80a8c26df50b29d8b72c991667e01adecea42c"
+urls = ["https://ftp.gnu.org/gnu/libtool/libtool-2.5.4.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/libt/libtool/libtool_2.5.4.orig.tar.xz"]
+file = "libtool_2.5.4.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr
+make
+make DESTDIR="$DESTDIR" install
+rm -f "$DESTDIR/usr/lib/libltdl.a"
+'''
+
+[ai]
+kind = "cli"
+launch = "bash"
+keywords = ["shell", "terminal", "command line"]
+

@@ -1,0 +1,17 @@
+[package]
+name = "bc"
+version = "1.07.1"
+summary = "Arbitrary precision calculator"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/bc/"
+
+[[source]]
+sha256 = "62adfca89b0a1c0164c2cdca59ca210c1d44c3ffc46daf9931cf4942664cb02a"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/b/bc/bc_1.07.1.orig.tar.gz"]
+
+[build]
+script = '''
+./configure --prefix=/usr --with-readline
+make
+make DESTDIR="$DESTDIR" install
+'''

@@ -1,0 +1,39 @@
+[package]
+name = "gcc"
+version = "15.2.0"
+summary = "GNU compiler collection (C and C++)"
+license = "GPL-3.0-or-later WITH GCC-exception-3.1"
+homepage = "https://gcc.gnu.org/"
+
+[[source]]
+sha256 = "3063dafdeed9fb9565f099b2560379bce08dae2b461ed4e30dd8d999f5f5747c"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-15/gcc-15_15.2.0.orig.tar.gz"]
+inner = "gcc-15-15.2.0/gcc-15.2.0.tar.xz"
+
+[build]
+script = '''
+sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+mkdir build && cd build
+../configure --prefix=/usr --build="$CORE_TGT" LD=ld --enable-languages=c,c++ \
+  --enable-default-pie --enable-default-ssp --enable-host-pie --disable-multilib \
+  --disable-bootstrap --disable-fixincludes --with-system-zlib
+make
+make DESTDIR="$DESTDIR" install
+ln -sr "$DESTDIR/usr/bin/cpp" "$DESTDIR/usr/lib"
+ln -sf gcc.1 "$DESTDIR/usr/share/man/man1/cc.1"
+ln -sf gcc "$DESTDIR/usr/bin/cc"
+mkdir -p "$DESTDIR/usr/lib/bfd-plugins"
+ln -sf "../../libexec/gcc/$CORE_TGT/15.2.0/liblto_plugin.so" "$DESTDIR/usr/lib/bfd-plugins/"
+mkdir -p "$DESTDIR/usr/share/gdb/auto-load/usr/lib"
+mv "$DESTDIR"/usr/lib/*gdb.py "$DESTDIR/usr/share/gdb/auto-load/usr/lib"
+# Sanity check with the new compiler in place of the temporary one.
+echo 'int main(){return 0;}' > t.c
+"$DESTDIR/usr/bin/gcc" -B"$DESTDIR/usr/lib/gcc/$CORE_TGT/15.2.0/" t.c -o t
+readelf -l t | grep -q '/lib64/ld-linux-x86-64.so.2'
+'''
+
+[ai]
+kind = "cli"
+launch = "passwd"
+keywords = ["user account", "password", "add user"]
+

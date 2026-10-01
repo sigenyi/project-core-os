@@ -1,0 +1,18 @@
+[package]
+name = "findutils-temp"
+version = "4.10.0"
+summary = "GNU findutils (temporary)"
+
+[[source]]
+sha256 = "1387e0b67ff247d2abde998f90dfbf70c1491391a59ddfecb8ae698789f0a4f5"
+urls = ["https://ftp.gnu.org/gnu/findutils/findutils-4.10.0.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/f/findutils/findutils_4.10.0.orig.tar.xz"]
+file = "findutils_4.10.0.orig.tar.xz"
+
+[build]
+stage = "cross"
+script = '''
+./configure --prefix=/usr --host="$LFS_TGT" --build="$(build-aux/config.guess)" --localstatedir=/var/lib/locate
+make
+make DESTDIR="$LFS" install
+'''

@@ -1,0 +1,25 @@
+[package]
+name = "coreutils"
+version = "9.7"
+summary = "Basic file, shell and text utilities"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/coreutils/"
+
+[[source]]
+sha256 = "e8bb26ad0293f9b5a1fc43fb42ba970e312c66ce92c1b0b16713d7500db251bf"
+urls = ["https://ftp.gnu.org/gnu/coreutils/coreutils-9.7.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/c/coreutils/coreutils_9.7.orig.tar.xz"]
+file = "coreutils_9.7.orig.tar.xz"
+
+[build]
+script = '''
+FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr --enable-no-install-program=kill,uptime
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "lsmod"
+keywords = ["kernel module", "driver", "modprobe"]
+

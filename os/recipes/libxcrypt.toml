@@ -1,0 +1,19 @@
+[package]
+name = "libxcrypt"
+version = "4.5.1"
+summary = "Password hashing library (crypt)"
+license = "LGPL-2.1-or-later"
+homepage = "https://github.com/besser82/libxcrypt"
+
+[[source]]
+sha256 = "bddf278d44e2ecdbf1439a52ddc0bb292921dd9f3013030a2a8461c32a45533f"
+urls = ["https://github.com/besser82/libxcrypt/releases/download/v4.5.1/libxcrypt-4.5.1.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxcrypt/libxcrypt_4.5.1.orig.tar.xz"]
+file = "libxcrypt_4.5.1.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --enable-hashes=strong,glibc --enable-obsolete-api=no --disable-static --disable-failure-tokens
+make
+make DESTDIR="$DESTDIR" install
+'''

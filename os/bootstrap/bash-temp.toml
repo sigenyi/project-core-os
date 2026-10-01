@@ -1,0 +1,19 @@
+[package]
+name = "bash-temp"
+version = "5.3"
+summary = "GNU bash (temporary)"
+
+[[source]]
+sha256 = "a70de6bb41f5e192534a5a1836b1d7fad9a8d4818a6e1506d70f38441552c17a"
+urls = ["https://ftp.gnu.org/gnu/bash/bash-5.3.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/b/bash/bash_5.3.orig.tar.xz"]
+file = "bash_5.3.orig.tar.xz"
+
+[build]
+stage = "cross"
+script = '''
+./configure --prefix=/usr --build="$(sh support/config.guess)" --host="$LFS_TGT" --without-bash-malloc
+make
+make DESTDIR="$LFS" install
+ln -sf bash "$LFS/usr/bin/sh"
+'''

@@ -16,11 +16,11 @@
 //!
 //! [build]
 //! stage = "final"        # cross | temp | final
-//! script = """
+//! script = '''   # literal string: no escape processing
 //! ./configure --prefix=/usr
 //! make
 //! make DESTDIR=$DESTDIR install
-//! """
+//! '''
 //!
 //! [runtime]
 //! depends = ["glibc"]
@@ -128,10 +128,18 @@ pub struct Build {
     /// Strip binaries and libraries in the staged tree (final stage).
     #[serde(default = "yes")]
     pub strip: bool,
+    /// Move /bin, /sbin, /lib… into /usr (off only for the package that owns the
+    /// compatibility symlinks themselves).
+    #[serde(default = "yes")]
+    pub merge_usr: bool,
     /// Recipes that must be built first (ordering only; the build root accumulates
     /// everything built before).
     #[serde(default)]
     pub after: Vec<String>,
+    /// Files or directories from this repository (relative to the recipe) copied
+    /// into the source tree: configuration, our own programs.
+    #[serde(default)]
+    pub files: Vec<String>,
 }
 
 fn yes() -> bool {
@@ -166,14 +174,23 @@ impl Recipe {
             if s.urls.is_empty() {
                 return Err("a source needs at least one URL".into());
             }
-            if s.dest.contains("..") || s.dest.starts_with('/') {
+            if s.dest.split('/').any(|c| c == "..") || s.dest.starts_with('/') {
                 return Err(format!("bad source dest {:?}", s.dest));
+            }
+        }
+        for f in &self.build.files {
+            if !self.local_file(f).exists() {
+                return Err(format!("file {f} does not exist"));
             }
         }
         if self.build.stage == Stage::Final && self.package.summary.trim().is_empty() {
             return Err("final packages need a summary".into());
         }
         Ok(())
+    }
+
+    pub fn local_file(&self, rel: &str) -> PathBuf {
+        self.path.parent().unwrap_or(Path::new(".")).join(rel)
     }
 
     pub fn id(&self) -> String {

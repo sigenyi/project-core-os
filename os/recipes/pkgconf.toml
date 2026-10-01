@@ -1,0 +1,27 @@
+[package]
+name = "pkgconf"
+version = "2.5.1"
+summary = "Compiler and linker flags for libraries (pkg-config)"
+license = "ISC"
+homepage = "http://pkgconf.org/"
+
+[[source]]
+sha256 = "cd05c9589b9f86ecf044c10a2269822bc9eb001eced2582cfffd658b0a50c243"
+urls = ["https://distfiles.ariadne.space/pkgconf/pkgconf-2.5.1.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/p/pkgconf/pkgconf_2.5.1.orig.tar.xz"]
+file = "pkgconf_2.5.1.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-static --docdir=/usr/share/doc/pkgconf-2.5.1
+make
+make DESTDIR="$DESTDIR" install
+ln -sf pkgconf "$DESTDIR/usr/bin/pkg-config"
+ln -sf pkgconf.1 "$DESTDIR/usr/share/man/man1/pkg-config.1"
+'''
+
+[ai]
+kind = "cli"
+launch = "bc"
+keywords = ["calculator", "math"]
+

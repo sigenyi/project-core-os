@@ -1,0 +1,56 @@
+[package]
+name = "glibc"
+version = "2.43"
+summary = "GNU C library"
+license = "LGPL-2.1-or-later"
+homepage = "https://www.gnu.org/software/libc/"
+
+[[source]]
+sha256 = "d9c86c6b5dbddb43a3e08270c5844fc5177d19442cf5b8df4be7c07cd5fa3831"
+urls = ["https://ftp.gnu.org/gnu/glibc/glibc-2.43.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/glibc_2.43.orig.tar.xz"]
+file = "glibc_2.43.orig.tar.xz"
+
+[build]
+script = '''
+sed -e '/test-installation/s@$(PERL)@echo not running@' -i Makefile
+mkdir build && cd build
+echo "rootsbindir=/usr/sbin" > configparms
+../configure --prefix=/usr --disable-werror --disable-nscd libc_cv_slibdir=/usr/lib \
+  --enable-stack-protector=strong --enable-kernel=5.10
+make
+mkdir -p "$DESTDIR/etc"
+touch "$DESTDIR/etc/ld.so.conf"
+make DESTDIR="$DESTDIR" install
+sed '/RTLDLIST=/s@/usr@@g' -i "$DESTDIR/usr/bin/ldd"
+rm -f "$DESTDIR/etc/ld.so.cache"
+# Locales: C.UTF-8 is the system default; en_US.UTF-8 for programs that expect it.
+mkdir -p "$DESTDIR/usr/lib/locale"
+I18NPATH=../localedata elf/ld.so --library-path . locale/localedef --prefix="$DESTDIR" \
+  -i ../localedata/locales/C -f ../localedata/charmaps/UTF-8 C.UTF-8 || test $? -eq 1
+I18NPATH=../localedata elf/ld.so --library-path . locale/localedef --prefix="$DESTDIR" \
+  -i ../localedata/locales/en_US -f ../localedata/charmaps/UTF-8 en_US.UTF-8 || test $? -eq 1
+test -s "$DESTDIR/usr/lib/locale/locale-archive"
+cat > "$DESTDIR/etc/nsswitch.conf" <<NSS
+passwd: files systemd
+group: files systemd
+shadow: files systemd
+hosts: mymachines resolve [!UNAVAIL=return] files myhostname dns
+networks: files
+protocols: files
+services: files
+ethers: files
+rpc: files
+NSS
+cat > "$DESTDIR/etc/ld.so.conf" <<LD
+/usr/local/lib
+include /etc/ld.so.conf.d/*.conf
+LD
+mkdir -p "$DESTDIR/etc/ld.so.conf.d" "$DESTDIR/usr/share/cpkg/hooks"
+cat > "$DESTDIR/usr/share/cpkg/hooks/ldconfig.toml" <<HOOK
+description = "Updating the shared library cache"
+paths = ["usr/lib/*.so*", "usr/local/lib/*.so*", "etc/ld.so.conf", "etc/ld.so.conf.d/**"]
+exec = ["/usr/bin/ldconfig"]
+order = 10
+HOOK
+'''

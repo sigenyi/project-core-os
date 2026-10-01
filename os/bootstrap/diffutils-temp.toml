@@ -1,0 +1,18 @@
+[package]
+name = "diffutils-temp"
+version = "3.12"
+summary = "GNU diffutils (temporary)"
+
+[[source]]
+sha256 = "7c8b7f9fc8609141fdea9cece85249d308624391ff61dedaf528fcb337727dfd"
+urls = ["https://ftp.gnu.org/gnu/diffutils/diffutils-3.12.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/d/diffutils/diffutils_3.12.orig.tar.xz"]
+file = "diffutils_3.12.orig.tar.xz"
+
+[build]
+stage = "cross"
+script = '''
+./configure --prefix=/usr --host="$LFS_TGT" --build="$(build-aux/config.guess)" gl_cv_func_strcasecmp_works=y
+make
+make DESTDIR="$LFS" install
+'''

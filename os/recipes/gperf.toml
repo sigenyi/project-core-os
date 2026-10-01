@@ -1,0 +1,19 @@
+[package]
+name = "gperf"
+version = "3.3"
+summary = "Perfect hash function generator"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/gperf/"
+
+[[source]]
+sha256 = "fd87e0aba7e43ae054837afd6cd4db03a3f2693deb3619085e6ed9d8d9604ad8"
+urls = ["https://ftp.gnu.org/gnu/gperf/gperf-3.3.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/universe/g/gperf/gperf_3.3.orig.tar.gz"]
+file = "gperf_3.3.orig.tar.gz"
+
+[build]
+script = '''
+./configure --prefix=/usr --docdir=/usr/share/doc/gperf-3.3
+make
+make DESTDIR="$DESTDIR" install
+'''

@@ -1,0 +1,26 @@
+[package]
+name = "man-db"
+version = "2.13.1"
+summary = "Manual page reader (man)"
+license = "GPL-2.0-or-later"
+homepage = "https://man-db.gitlab.io/man-db/"
+
+[[source]]
+sha256 = "8afebb6f7eb6bb8542929458841f5c7e6f240e30c86358c1fbcefbea076c87d9"
+urls = ["https://download.savannah.gnu.org/releases/man-db/man-db-2.13.1.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/m/man-db/man-db_2.13.1.orig.tar.xz"]
+file = "man-db_2.13.1.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --docdir=/usr/share/doc/man-db-2.13.1 --sysconfdir=/etc \
+  --disable-setuid --enable-cache-owner=bin --with-browser=/usr/bin/lynx \
+  --with-vgrind=/usr/bin/vgrind --with-grap=/usr/bin/grap
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "service"
+keywords = ["dbus", "message bus"]
+

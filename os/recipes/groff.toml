@@ -1,0 +1,25 @@
+[package]
+name = "groff"
+version = "1.23.0"
+summary = "Document formatting system (renders manual pages)"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/groff/"
+
+[[source]]
+sha256 = "6b9757f592b7518b4902eb6af7e54570bdccba37a871fddb2d30ae3863511c13"
+urls = ["https://ftp.gnu.org/gnu/groff/groff-1.23.0.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/g/groff/groff_1.23.0.orig.tar.gz"]
+file = "groff_1.23.0.orig.tar.gz"
+
+[build]
+script = '''
+PAGE=A4 ./configure --prefix=/usr
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "find"
+keywords = ["find file", "search files", "locate"]
+

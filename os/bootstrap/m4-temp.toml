@@ -1,0 +1,18 @@
+[package]
+name = "m4-temp"
+version = "1.4.21"
+summary = "GNU m4 (temporary)"
+
+[[source]]
+sha256 = "f25c6ab51548a73a75558742fb031e0625d6485fe5f9155949d6486a2408ab66"
+urls = ["https://ftp.gnu.org/gnu/m4/m4-1.4.21.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/m/m4/m4_1.4.21.orig.tar.xz"]
+file = "m4_1.4.21.orig.tar.xz"
+
+[build]
+stage = "cross"
+script = '''
+./configure --prefix=/usr --host="$LFS_TGT" --build="$(build-aux/config.guess)" 
+make
+make DESTDIR="$LFS" install
+'''

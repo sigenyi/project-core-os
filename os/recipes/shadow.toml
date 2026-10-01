@@ -1,0 +1,38 @@
+[package]
+name = "shadow"
+version = "4.17.4"
+summary = "User and group account tools (login, passwd, useradd)"
+license = "BSD-3-Clause"
+homepage = "https://github.com/shadow-maint/shadow"
+
+[[source]]
+sha256 = "554801054694ff7d8a7abdf0d6ece34e2f16e111673cc01b8c9ee1278451181e"
+urls = ["https://github.com/shadow-maint/shadow/releases/download/4.17.4/shadow-4.17.4.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/s/shadow/shadow_4.17.4.orig.tar.xz"]
+file = "shadow_4.17.4.orig.tar.xz"
+
+[build]
+script = '''
+# coreutils provides groups; man-pages provides getspnam(3) and passwd(5).
+sed -i 's/groups$(EXEEXT) //' src/Makefile.in
+find man -name Makefile.in -exec sed -i 's/groups\.1 / /;s/getspnam\.3 / /;s/passwd\.5 / /' {} \;
+sed -e 's:#ENCRYPT_METHOD DES:ENCRYPT_METHOD YESCRYPT:' \
+    -e 's:/var/spool/mail:/var/mail:' \
+    -e '/PATH=/{s@/sbin:@@;s@/bin:@@}' -i etc/login.defs
+touch /usr/bin/passwd
+./configure --sysconfdir=/etc --disable-static --with-yescrypt --without-libbsd \
+  --with-group-name-max-length=32
+make
+make exec_prefix=/usr DESTDIR="$DESTDIR" install
+make -C man DESTDIR="$DESTDIR" install-man
+mkdir -p "$DESTDIR/etc/default"
+cat > "$DESTDIR/etc/default/useradd" <<UA
+GROUP=999
+HOME=/home
+INACTIVE=-1
+EXPIRE=
+SHELL=/bin/bash
+SKEL=/etc/skel
+CREATE_MAIL_SPOOL=no
+UA
+'''

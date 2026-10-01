@@ -1,0 +1,25 @@
+[package]
+name = "libpipeline"
+version = "1.5.8"
+summary = "Pipeline manipulation library"
+license = "GPL-3.0-or-later"
+homepage = "https://libpipeline.gitlab.io/libpipeline/"
+
+[[source]]
+sha256 = "1b1203ca152ccd63983c3f2112f7fe6fa5afd453218ede5153d1b31e11bb8405"
+urls = ["https://download.savannah.gnu.org/releases/libpipeline/libpipeline-1.5.8.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/libp/libpipeline/libpipeline_1.5.8.orig.tar.gz"]
+file = "libpipeline_1.5.8.orig.tar.gz"
+
+[build]
+script = '''
+./configure --prefix=/usr 
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "loadkeys"
+keywords = ["keyboard layout", "console font"]
+

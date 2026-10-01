@@ -1,0 +1,25 @@
+[package]
+name = "less"
+version = "668"
+summary = "Terminal pager"
+license = "GPL-3.0-or-later OR BSD-2-Clause"
+homepage = "https://www.greenwoodsoftware.com/less/"
+
+[[source]]
+sha256 = "2819f55564d86d542abbecafd82ff61e819a3eec967faa36cd3e68f1596a44b8"
+urls = ["https://www.greenwoodsoftware.com/less/less-668.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/l/less/less_668.orig.tar.gz"]
+file = "less_668.orig.tar.gz"
+
+[build]
+script = '''
+./configure --prefix=/usr --sysconfdir=/etc
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "ping"
+keywords = ["ping", "network test", "hostname", "traceroute"]
+

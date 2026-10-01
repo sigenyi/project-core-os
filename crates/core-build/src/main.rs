@@ -57,7 +57,11 @@ enum Cmd {
 }
 
 fn all_recipes(dir: &Path) -> Result<(Vec<Recipe>, Vec<Recipe>), String> {
-    Ok((load_ordered(&dir.join("bootstrap"))?, load_ordered(&dir.join("recipes"))?))
+    let load = |sub: &str| {
+        let d = dir.join(sub);
+        if d.join("ORDER").exists() { load_ordered(&d) } else { Ok(Vec::new()) }
+    };
+    Ok((load("bootstrap")?, load("recipes")?))
 }
 
 fn run_list(b: &mut Builder, list: &[Recipe]) -> Result<(), String> {

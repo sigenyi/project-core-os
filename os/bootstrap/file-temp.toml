@@ -1,0 +1,24 @@
+[package]
+name = "file-temp"
+version = "5.46"
+summary = "file (temporary)"
+
+[[source]]
+sha256 = "c9cc77c7c560c543135edc555af609d5619dbef011997e988ce40a3d75d86088"
+urls = ["https://astron.com/pub/file/file-5.46.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/f/file/file_5.46.orig.tar.gz"]
+file = "file_5.46.orig.tar.gz"
+
+[build]
+stage = "cross"
+script = '''
+mkdir build
+pushd build
+  ../configure --disable-bzlib --disable-libseccomp --disable-xzlib --disable-zlib
+  make
+popd
+./configure --prefix=/usr --host="$LFS_TGT" --build="$(./config.guess)"
+make FILE_COMPILE="$(pwd)/build/src/file"
+make DESTDIR="$LFS" install
+rm -f "$LFS/usr/lib/libmagic.la"
+'''

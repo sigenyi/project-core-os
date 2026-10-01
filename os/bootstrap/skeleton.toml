@@ -1,0 +1,16 @@
+[package]
+name = "skeleton"
+version = "1"
+summary = "Directory layout of the new root (merged /usr)"
+
+[build]
+stage = "cross"
+script = '''
+# Merged /usr from the very first step: bin, sbin and usr/sbin are usr/bin;
+# lib, lib64 and usr/lib64 are usr/lib.
+mkdir -p "$LFS"/{etc,var,tools,usr/bin,usr/lib}
+for l in bin sbin; do [ -L "$LFS/$l" ] || ln -s usr/bin "$LFS/$l"; done
+for l in lib lib64; do [ -L "$LFS/$l" ] || ln -s usr/lib "$LFS/$l"; done
+[ -L "$LFS/usr/sbin" ] || ln -s bin "$LFS/usr/sbin"
+[ -L "$LFS/usr/lib64" ] || ln -s lib "$LFS/usr/lib64"
+'''

@@ -1,0 +1,25 @@
+[package]
+name = "glibc-cross"
+version = "2.43"
+summary = "GNU C library (cross-compiled)"
+
+[[source]]
+sha256 = "d9c86c6b5dbddb43a3e08270c5844fc5177d19442cf5b8df4be7c07cd5fa3831"
+urls = ["https://ftp.gnu.org/gnu/glibc/glibc-2.43.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/glibc_2.43.orig.tar.xz"]
+file = "glibc_2.43.orig.tar.xz"
+
+[build]
+stage = "cross"
+script = '''
+mkdir build && cd build
+echo "rootsbindir=/usr/sbin" > configparms
+../configure --prefix=/usr --host="$LFS_TGT" --build="$(../scripts/config.guess)" \
+  --disable-nscd --enable-kernel=5.10 libc_cv_slibdir=/usr/lib
+make
+make DESTDIR="$LFS" install
+sed '/RTLDLIST=/s@/usr@@g' -i "$LFS/usr/bin/ldd"
+# Sanity check: the cross compiler must produce programs using our dynamic loader.
+echo 'int main(){return 0;}' | "$LFS_TGT-gcc" -xc - -o a.out
+readelf -l a.out | grep -q 'Requesting program interpreter: /lib64/ld-linux-x86-64.so.2'
+'''

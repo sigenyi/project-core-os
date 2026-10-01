@@ -1,0 +1,19 @@
+[package]
+name = "automake"
+version = "1.18.1"
+summary = "Makefile generator"
+license = "GPL-2.0-or-later"
+homepage = "https://www.gnu.org/software/automake/"
+
+[[source]]
+sha256 = "168aa363278351b89af56684448f525a5bce5079d0b6842bd910fdd3f1646887"
+urls = ["https://ftp.gnu.org/gnu/automake/automake-1.18.1.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/a/automake/automake_1.18.1.orig.tar.xz"]
+file = "automake_1.18.1.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --docdir=/usr/share/doc/automake-1.18.1
+make
+make DESTDIR="$DESTDIR" install
+'''

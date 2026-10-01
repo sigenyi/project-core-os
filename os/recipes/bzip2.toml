@@ -1,0 +1,25 @@
+[package]
+name = "bzip2"
+version = "1.0.8"
+summary = "bzip2 compressor and library"
+license = "bzip2-1.0.6"
+homepage = "https://sourceware.org/bzip2/"
+
+[[source]]
+sha256 = "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/b/bzip2/bzip2_1.0.8.orig.tar.gz"]
+
+[build]
+script = '''
+sed -i 's@\(ln -s -f \)$(PREFIX)/bin/@\1@' Makefile
+sed -i "s@(PREFIX)/man@(PREFIX)/share/man@g" Makefile
+make -f Makefile-libbz2_so
+make clean
+make
+make PREFIX="$DESTDIR/usr" install
+cp -a libbz2.so.* "$DESTDIR/usr/lib"
+ln -sf libbz2.so.1.0.8 "$DESTDIR/usr/lib/libbz2.so"
+cp bzip2-shared "$DESTDIR/usr/bin/bzip2"
+for i in bzcat bunzip2; do ln -sf bzip2 "$DESTDIR/usr/bin/$i"; done
+rm -f "$DESTDIR/usr/lib/libbz2.a"
+'''

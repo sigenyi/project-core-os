@@ -1,0 +1,23 @@
+[package]
+name = "python-flit-core"
+version = "3.12.0"
+summary = "Python build backend (flit_core)"
+license = "BSD-3-Clause"
+homepage = "https://flit.pypa.io/"
+
+[[source]]
+sha256 = "1c80f34dd96992e7758b40423d2809f48f640ca285d0b7821825e50745ec3740"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/universe/f/flit/flit_3.12.0.orig.tar.gz"]
+
+[build]
+script = '''
+cd flit_core
+pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps "$PWD"
+pip3 install --no-index --no-deps --find-links dist --root="$DESTDIR" --no-warn-script-location --no-compile dist/*.whl
+'''
+
+[ai]
+kind = "cli"
+launch = "python3"
+keywords = ["python", "programming", "script"]
+

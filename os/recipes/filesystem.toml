@@ -1,0 +1,36 @@
+[package]
+name = "filesystem"
+version = "0.1"
+summary = "Directory layout, merged-/usr links and base configuration of C.O.R.E. OS"
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/sigenyi/project-core-os"
+
+[build]
+merge_usr = false
+strip = false
+files = ["filesystem/etc", "filesystem/usr"]
+script = '''
+d="$DESTDIR"
+mkdir -p "$d"/{boot,dev,home,mnt,opt,proc,run,srv,sys,etc/{opt,profile.d,sysconfig}}
+mkdir -p "$d"/usr/{bin,include,src,lib/{firmware,locale}}
+mkdir -p "$d"/usr/share/{color,dict,doc,info,locale,misc,terminfo,zoneinfo,man/man{1..8}}
+mkdir -p "$d"/usr/local/{bin,include,lib,share,src}
+mkdir -p "$d"/var/{cache,local,log,mail,opt,spool,lib/{misc,locate}}
+install -d -m 0750 "$d/root"
+install -d -m 1777 "$d/tmp" "$d/var/tmp"
+# Merged /usr: the classic paths are links into /usr.
+ln -s usr/bin "$d/bin"
+ln -s usr/bin "$d/sbin"
+ln -s usr/lib "$d/lib"
+ln -s usr/lib "$d/lib64"
+ln -s bin "$d/usr/sbin"
+ln -s lib "$d/usr/lib64"
+ln -s /run "$d/var/run"
+ln -s /run/lock "$d/var/lock"
+ln -s /proc/self/mounts "$d/etc/mtab"
+ln -s ../usr/lib/os-release "$d/etc/os-release"
+ln -s ../usr/share/zoneinfo/UTC "$d/etc/localtime"
+cp -r etc/. "$d/etc/"
+cp -r usr/. "$d/usr/"
+chmod 0600 "$d/etc/shadow" "$d/etc/gshadow"
+'''

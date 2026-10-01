@@ -1,0 +1,17 @@
+[package]
+name = "libcap"
+version = "2.75"
+summary = "POSIX capabilities library and tools"
+license = "BSD-3-Clause OR GPL-2.0-only"
+homepage = "https://sites.google.com/site/fullycapable/"
+
+[[source]]
+sha256 = "de4e7e064c9ba451d5234dd46e897d7c71c96a9ebf9a0c445bc04f4742d83632"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/libc/libcap2/libcap2_2.75.orig.tar.xz"]
+
+[build]
+script = '''
+sed -i '/install -m.*STA/d' libcap/Makefile
+make prefix=/usr lib=lib
+make prefix=/usr lib=lib DESTDIR="$DESTDIR" install
+'''

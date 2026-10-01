@@ -90,7 +90,7 @@ pub fn unpack(recipe: &Recipe, cache: &Path, tree: &Path) -> Result<(), String> 
             Some(inner) => {
                 let outer = tree.with_extension("outer");
                 let _ = fs::remove_dir_all(&outer);
-                tar_extract(&file, &outer, 1)?;
+                tar_extract(&file, &outer, 0)?;
                 let inner_path = outer.join(inner);
                 if !inner_path.exists() {
                     return Err(format!("{} does not contain {inner}", file.display()));
@@ -98,6 +98,20 @@ pub fn unpack(recipe: &Recipe, cache: &Path, tree: &Path) -> Result<(), String> 
                 tar_extract(&inner_path, &target, src.strip)?;
                 fs::remove_dir_all(&outer).map_err(|e| e.to_string())?;
             }
+        }
+    }
+    for rel in &recipe.build.files {
+        let from = recipe.local_file(rel);
+        let name = from.file_name().ok_or_else(|| format!("bad file {rel}"))?;
+        let out = Command::new("cp")
+            .arg("-a")
+            .arg("--")
+            .arg(&from)
+            .arg(tree.join(name))
+            .output()
+            .map_err(|e| format!("cannot run cp: {e}"))?;
+        if !out.status.success() {
+            return Err(format!("copying {}: {}", from.display(), String::from_utf8_lossy(&out.stderr).trim()));
         }
     }
     Ok(())

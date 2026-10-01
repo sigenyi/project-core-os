@@ -1,0 +1,23 @@
+[package]
+name = "python-markupsafe"
+version = "3.0.3"
+summary = "String escaping for Python templates"
+license = "BSD-3-Clause"
+homepage = "https://palletsprojects.com/p/markupsafe/"
+
+[[source]]
+sha256 = "722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/m/markupsafe/markupsafe_3.0.3.orig.tar.gz"]
+
+[build]
+script = '''
+cd .
+pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps "$PWD"
+pip3 install --no-index --no-deps --find-links dist --root="$DESTDIR" --no-warn-script-location --no-compile dist/*.whl
+'''
+
+[ai]
+kind = "tui"
+launch = "nano"
+keywords = ["text editor", "editor", "edit file", "notepad"]
+
