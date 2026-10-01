@@ -15,11 +15,13 @@ file = "grub2_2.14.orig.tar.xz"
 strip = false
 script = '''
 unset CFLAGS CPPFLAGS CXXFLAGS LDFLAGS
-echo depends bli part_gpt > grub-core/extra_deps.lst
 for platform in pc efi; do
   mkdir "build-$platform"
   (
     cd "build-$platform"
+    # Missing from the release archive; this is its content in GRUB's repository.
+    mkdir -p grub-core
+    echo depends bli part_gpt > grub-core/extra_deps.lst
     extra=""
     [ "$platform" = efi ] && extra="--target=x86_64"
     ../configure --prefix=/usr --sysconfdir=/etc --disable-efiemu --disable-werror \

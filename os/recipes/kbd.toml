@@ -14,7 +14,8 @@ file = "kbd_2.7.1.orig.tar.gz"
 [build]
 script = '''
 # The release archive is a git snapshot without a generated configure script.
-./autogen.sh
+# (Its autogen.sh needs which(1); autoreconf runs the same tools.)
+autoreconf -fi
 ./configure --prefix=/usr --disable-vlock
 make
 make DESTDIR="$DESTDIR" install

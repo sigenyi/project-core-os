@@ -16,6 +16,7 @@ script = '''
 ./configure --prefix=/usr --sysconfdir=/etc --enable-utf8 --docdir=/usr/share/doc/nano-8.7.1
 make
 make DESTDIR="$DESTDIR" install
+install -d "$DESTDIR/etc"
 cat > "$DESTDIR/etc/nanorc" <<RC
 set autoindent
 set constantshow
