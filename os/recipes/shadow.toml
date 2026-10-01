@@ -36,3 +36,8 @@ SKEL=/etc/skel
 CREATE_MAIL_SPOOL=no
 UA
 '''
+
+[ai]
+kind = "cli"
+launch = "passwd"
+keywords = ["user account", "password", "add user"]

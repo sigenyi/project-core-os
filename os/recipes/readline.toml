@@ -20,9 +20,3 @@ sed -i 's/-Wl,-rpath,[^ ]*//' support/shobj-conf
 make SHLIB_LIBS="-lncursesw"
 make SHLIB_LIBS="-lncursesw" DESTDIR="$DESTDIR" install
 '''
-
-[ai]
-kind = "cli"
-launch = "file"
-keywords = ["file type", "identify file"]
-

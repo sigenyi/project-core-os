@@ -23,9 +23,3 @@ make
 make DESTDIR="$DESTDIR" LN='ln -f' install
 ln -sf gawk.1 "$DESTDIR/usr/share/man/man1/awk.1"
 '''
-
-[ai]
-kind = "cli"
-launch = "diff"
-keywords = ["compare files", "difference"]
-

@@ -22,9 +22,3 @@ for lib in ncurses form panel menu; do
 done
 ln -sf libncursesw.so "$DESTDIR/usr/lib/libcurses.so"
 '''
-
-[ai]
-kind = "cli"
-launch = "gcc"
-keywords = ["compiler", "c compiler", "c++"]
-

@@ -17,3 +17,8 @@ script = '''
 make
 make DESTDIR="$DESTDIR" install
 '''
+
+[ai]
+kind = "cli"
+launch = "gzip"
+keywords = ["compress", "decompress", "gz"]

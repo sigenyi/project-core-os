@@ -63,3 +63,6 @@ exec = ["/usr/bin/ldconfig"]
 order = 10
 HOOK
 '''
+
+[runtime]
+depends = ["filesystem"]

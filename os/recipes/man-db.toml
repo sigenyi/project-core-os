@@ -21,6 +21,6 @@ make DESTDIR="$DESTDIR" install
 '''
 
 [ai]
-kind = "service"
-keywords = ["dbus", "message bus"]
-
+kind = "cli"
+launch = "man"
+keywords = ["manual", "help", "documentation"]

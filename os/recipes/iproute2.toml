@@ -21,6 +21,5 @@ make SBINDIR=/usr/sbin DESTDIR="$DESTDIR" install
 
 [ai]
 kind = "cli"
-launch = "gzip"
-keywords = ["compress", "decompress", "gz"]
-
+launch = "ip"
+keywords = ["network", "ip address", "routes", "sockets"]

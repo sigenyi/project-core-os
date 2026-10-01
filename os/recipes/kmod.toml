@@ -19,6 +19,7 @@ ninja -C build
 DESTDIR="$DESTDIR" ninja -C build install
 '''
 
-[runtime]
-depends = ["python", "ninja"]
-
+[ai]
+kind = "cli"
+launch = "lsmod"
+keywords = ["kernel module", "driver", "modprobe"]

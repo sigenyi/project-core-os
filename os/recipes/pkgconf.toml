@@ -19,9 +19,3 @@ make DESTDIR="$DESTDIR" install
 ln -sf pkgconf "$DESTDIR/usr/bin/pkg-config"
 ln -sf pkgconf.1 "$DESTDIR/usr/share/man/man1/pkg-config.1"
 '''
-
-[ai]
-kind = "cli"
-launch = "bc"
-keywords = ["calculator", "math"]
-

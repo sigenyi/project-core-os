@@ -19,7 +19,3 @@ for tz in etcetera southamerica northamerica europe africa antarctica asia austr
 done
 cp zone.tab zone1970.tab iso3166.tab "$Z"
 '''
-
-[runtime]
-depends = ["filesystem"]
-

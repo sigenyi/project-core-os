@@ -37,3 +37,7 @@ install -Dm644 System.map "$DESTDIR/boot/System.map-$release"
 install -Dm644 .config "$DESTDIR/boot/config-$release"
 ln -sf "vmlinuz-$release" "$DESTDIR/boot/vmlinuz"
 '''
+
+[ai]
+kind = "system"
+keywords = ["kernel", "drivers"]

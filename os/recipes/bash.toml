@@ -22,6 +22,5 @@ ln -sf bash "$DESTDIR/usr/bin/sh"
 
 [ai]
 kind = "cli"
-launch = "grep"
-keywords = ["search text", "find in files"]
-
+launch = "bash"
+keywords = ["shell", "terminal", "command line"]

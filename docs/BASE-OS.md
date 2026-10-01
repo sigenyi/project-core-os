@@ -40,7 +40,8 @@ A few of those tarballs are repacked by Debian, not byte-identical to upstream:
   pages are kept). gmp and make lose their `doc/` directory entirely.
 * GCC is wrapped: the orig tarball contains the upstream `gcc-15.2.0.tar.xz`, which
   recipes unpack with `inner`.
-* expat is a snapshot of the upstream git tag; its recipe runs `buildconf.sh`.
+* expat, libxcrypt, libffi and kbd are snapshots of the upstream git tag; their
+  recipes generate `configure` with the project's own `buildconf.sh`/`autogen.sh`.
 
 Those recipes list only the archive URL, since the upstream file has a different
 checksum.
@@ -50,6 +51,10 @@ checksum.
 | Package | Problem | Fix |
 |---|---|---|
 | glibc 2.43 | `<sys/mount.h>` redefines `OPEN_TREE_CLONE`, which Linux 7.0's `<linux/mount.h>` now spells `(1 << 0)`; glibc builds with `-Werror` | Define the `open_tree` flags only when the kernel header has not |
+| GCC 15.2 (libgomp) | glibc 2.43's `strchr` returns `const char *` for a `const` argument (C23); libgomp builds with `-Werror` | Declare the read-only result `const` |
+| libxcrypt 4.5.1 | Same `strchr` change, triggered by a needless `const` cast on a writable buffer | Drop the cast |
+| elfutils 0.194 | Same change in the RISC-V disassembler | Only `libelf` is built, which is all the base needs |
+| bc 1.07.1 | Post-processes its math library with `ed`, which the base does not ship | The same edits with `sed`; the recipe checks bc's output |
 | binutils 2.46 (temporary) | libtool would link libctf against the host's libraries | Drop `$add_dir` in `ltmain.sh`, as Linux From Scratch does |
 
 ## Build stages

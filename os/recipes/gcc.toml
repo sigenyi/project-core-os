@@ -12,6 +12,10 @@ inner = "gcc-15-15.2.0/gcc-15.2.0.tar.xz"
 
 [build]
 script = '''
+# glibc 2.43's strchr returns const char * for a const argument (C23); libgomp
+# builds with -Werror and stores the result in a char *. It only reads it.
+sed -i "s/^\(\s*\)char \*q = strchr (p + 1, '}');/\1const char *q = strchr (p + 1, '}');/" libgomp/affinity-fmt.c
+grep -q "const char \*q = strchr (p + 1, '}');" libgomp/affinity-fmt.c
 sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
 mkdir build && cd build
 ../configure --prefix=/usr --build="$CORE_TGT" LD=ld --enable-languages=c,c++ \
@@ -34,6 +38,5 @@ readelf -l t | grep -q '/lib64/ld-linux-x86-64.so.2'
 
 [ai]
 kind = "cli"
-launch = "passwd"
-keywords = ["user account", "password", "add user"]
-
+launch = "gcc"
+keywords = ["compiler", "c compiler", "c++"]

@@ -17,3 +17,8 @@ make DESTDIR="$DESTDIR" install
 ln -sf flex "$DESTDIR/usr/bin/lex"
 ln -sf flex.1 "$DESTDIR/usr/share/man/man1/lex.1"
 '''
+
+[ai]
+kind = "cli"
+launch = "bc"
+keywords = ["calculator", "math"]

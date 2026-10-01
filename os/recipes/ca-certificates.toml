@@ -16,9 +16,3 @@ python3 make-bundle.py mozilla/certdata.txt > ca-certificates.crt
 install -Dm644 ca-certificates.crt "$DESTDIR/etc/ssl/certs/ca-certificates.crt"
 ln -sf certs/ca-certificates.crt "$DESTDIR/etc/ssl/cert.pem"
 '''
-
-[ai]
-kind = "cli"
-launch = "mkfs.ext4"
-keywords = ["format disk", "file system check", "fsck"]
-

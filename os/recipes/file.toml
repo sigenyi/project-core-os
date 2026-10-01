@@ -20,6 +20,5 @@ make DESTDIR="$DESTDIR" install
 
 [ai]
 kind = "cli"
-launch = "zstd"
-keywords = ["compress", "decompress", "zstandard"]
-
+launch = "file"
+keywords = ["file type", "identify file"]

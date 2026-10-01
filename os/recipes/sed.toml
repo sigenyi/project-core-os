@@ -17,3 +17,8 @@ script = '''
 make
 make DESTDIR="$DESTDIR" install
 '''
+
+[ai]
+kind = "cli"
+launch = "sed"
+keywords = ["stream editor", "replace text"]

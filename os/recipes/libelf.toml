@@ -14,14 +14,10 @@ file = "elfutils_0.194.orig.tar.bz2"
 [build]
 script = '''
 ./configure --prefix=/usr --disable-debuginfod --enable-libdebuginfod=dummy
-make
+# Only libelf is packaged, so only it and its internal helper library are built.
+make -C lib
+make -C libelf
 make -C libelf DESTDIR="$DESTDIR" install
 install -Dm644 config/libelf.pc "$DESTDIR/usr/lib/pkgconfig/libelf.pc"
 rm -f "$DESTDIR/usr/lib/libelf.a"
 '''
-
-[ai]
-kind = "cli"
-launch = "openssl"
-keywords = ["tls", "certificate", "encryption"]
-

@@ -24,6 +24,4 @@ ln -sf /etc/machine-id "$DESTDIR/var/lib/dbus/machine-id"
 
 [ai]
 kind = "service"
-launch = "systemctl"
-keywords = ["services", "boot", "logs", "journal", "network"]
-
+keywords = ["dbus", "message bus"]

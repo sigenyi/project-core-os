@@ -20,6 +20,5 @@ make DESTDIR="$DESTDIR" install
 
 [ai]
 kind = "cli"
-launch = "bzip2"
-keywords = ["compress", "decompress", "bz2"]
-
+launch = "xz"
+keywords = ["compress", "decompress", "xz", "lzma"]

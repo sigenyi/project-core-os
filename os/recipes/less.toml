@@ -19,7 +19,6 @@ make DESTDIR="$DESTDIR" install
 '''
 
 [ai]
-kind = "cli"
-launch = "ping"
-keywords = ["ping", "network test", "hostname", "traceroute"]
-
+kind = "tui"
+launch = "less"
+keywords = ["pager", "view file"]

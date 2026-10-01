@@ -18,3 +18,8 @@ sed -i "s/echo/#echo/" src/egrep.sh
 make
 make DESTDIR="$DESTDIR" install
 '''
+
+[ai]
+kind = "cli"
+launch = "grep"
+keywords = ["search text", "find in files"]

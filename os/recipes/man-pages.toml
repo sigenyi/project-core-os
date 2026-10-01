@@ -17,3 +17,7 @@ script = '''
 rm -f man/man3/crypt*
 make -R GIT=false prefix=/usr DESTDIR="$DESTDIR" install
 '''
+
+[ai]
+kind = "data"
+keywords = ["manual", "documentation"]

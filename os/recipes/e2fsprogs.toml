@@ -22,7 +22,6 @@ rm -f "$DESTDIR"/usr/lib/{libcom_err,libe2p,libext2fs,libss}.a
 '''
 
 [ai]
-kind = "tui"
-launch = "top"
-keywords = ["processes", "memory usage", "cpu usage", "task manager", "kill"]
-
+kind = "cli"
+launch = "mkfs.ext4"
+keywords = ["format disk", "file system check", "fsck"]

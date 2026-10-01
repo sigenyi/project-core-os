@@ -13,6 +13,8 @@ file = "kbd_2.7.1.orig.tar.gz"
 
 [build]
 script = '''
+# The release archive is a git snapshot without a generated configure script.
+./autogen.sh
 ./configure --prefix=/usr --disable-vlock
 make
 make DESTDIR="$DESTDIR" install
@@ -20,6 +22,5 @@ make DESTDIR="$DESTDIR" install
 
 [ai]
 kind = "cli"
-launch = "ip"
-keywords = ["network", "ip address", "routes", "sockets"]
-
+launch = "loadkeys"
+keywords = ["keyboard layout", "console font"]

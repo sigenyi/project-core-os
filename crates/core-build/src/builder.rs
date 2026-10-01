@@ -230,6 +230,7 @@ impl Builder {
             }
         }
         let pkg = create_package(dest, r.manifest(self.epoch), &repo)?;
+        check_ai_metadata(&pkg)?;
         let mut db = Db::open(&root)?;
         let _lock = db.lock()?;
         let opts = Options { overwrite_unowned: true, force: false, run_hooks: true };
@@ -258,4 +259,20 @@ impl Builder {
         cmd.status().map_err(|e| e.to_string())?;
         Ok(())
     }
+}
+
+/// The AI launches programs by the name a package declares, so that name must be a
+/// program the package really installs.
+fn check_ai_metadata(pkg: &Path) -> Result<(), String> {
+    let m = core_pkg::archive::read_metadata(pkg)?.manifest;
+    let launch = &m.ai.launch;
+    if !launch.is_empty() && !m.provides.binaries.iter().any(|b| b == launch) {
+        let _ = fs::remove_file(pkg);
+        return Err(format!(
+            "[ai] launch = {launch:?}, but {} installs no such program (it provides: {})",
+            m.package.name,
+            m.provides.binaries.join(" ")
+        ));
+    }
+    Ok(())
 }

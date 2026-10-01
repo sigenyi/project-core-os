@@ -20,7 +20,6 @@ make DESTDIR="$DESTDIR" install
 '''
 
 [ai]
-kind = "cli"
-launch = "man"
-keywords = ["manual", "help", "documentation"]
-
+kind = "tui"
+launch = "top"
+keywords = ["processes", "memory usage", "cpu usage", "task manager", "kill"]

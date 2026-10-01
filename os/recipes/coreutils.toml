@@ -20,6 +20,5 @@ make DESTDIR="$DESTDIR" install
 
 [ai]
 kind = "cli"
-launch = "lsmod"
-keywords = ["kernel module", "driver", "modprobe"]
-
+launch = "ls"
+keywords = ["list files", "copy", "move", "delete file", "disk usage"]

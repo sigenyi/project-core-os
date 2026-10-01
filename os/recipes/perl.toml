@@ -25,7 +25,6 @@ make DESTDIR="$DESTDIR" install
 '''
 
 [ai]
-kind = "tui"
-launch = "less"
-keywords = ["pager", "view file"]
-
+kind = "cli"
+launch = "perl"
+keywords = ["perl", "script"]

@@ -18,3 +18,8 @@ make
 make DESTDIR="$DESTDIR" MANSUFFIX=ssl install_sw install_ssldirs install_man_docs
 rm -f "$DESTDIR"/usr/lib/lib{crypto,ssl}.a
 '''
+
+[ai]
+kind = "cli"
+launch = "openssl"
+keywords = ["tls", "certificate", "encryption"]

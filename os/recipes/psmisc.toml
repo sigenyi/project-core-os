@@ -20,6 +20,5 @@ make DESTDIR="$DESTDIR" install
 
 [ai]
 kind = "cli"
-launch = "sed"
-keywords = ["stream editor", "replace text"]
-
+launch = "pstree"
+keywords = ["kill process", "process tree"]

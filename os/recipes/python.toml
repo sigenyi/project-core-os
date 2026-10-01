@@ -23,3 +23,8 @@ cat > "$DESTDIR/usr/lib/python3.14/EXTERNALLY-MANAGED" <<EM
 Error=System Python packages are managed by cpkg. Use a virtual environment (python3 -m venv) for your own packages.
 EM
 '''
+
+[ai]
+kind = "cli"
+launch = "python3"
+keywords = ["python", "programming", "script"]

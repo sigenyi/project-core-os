@@ -28,3 +28,8 @@ set regexp
 include "/usr/share/nano/*.nanorc"
 RC
 '''
+
+[ai]
+kind = "tui"
+launch = "nano"
+keywords = ["text editor", "editor", "edit file", "notepad"]

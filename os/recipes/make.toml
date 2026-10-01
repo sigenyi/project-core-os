@@ -18,3 +18,8 @@ sed -i 's/^SUBDIRS = lib po doc$/SUBDIRS = lib po/; /^man_MANS = /d' Makefile.in
 make
 make DESTDIR="$DESTDIR" install
 '''
+
+[ai]
+kind = "cli"
+launch = "make"
+keywords = ["build", "makefile"]

@@ -15,3 +15,8 @@ make prefix=/usr
 make prefix=/usr DESTDIR="$DESTDIR" install
 rm -f "$DESTDIR/usr/lib/libzstd.a"
 '''
+
+[ai]
+kind = "cli"
+launch = "zstd"
+keywords = ["compress", "decompress", "zstandard"]

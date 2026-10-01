@@ -17,9 +17,3 @@ PAGE=A4 ./configure --prefix=/usr
 make
 make DESTDIR="$DESTDIR" install
 '''
-
-[ai]
-kind = "cli"
-launch = "find"
-keywords = ["find file", "search files", "locate"]
-

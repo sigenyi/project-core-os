@@ -19,3 +19,8 @@ sed -i 's/def HAVE_TERMCAP_TGETENT/ 1/' telnet/telnet.c
 make
 make DESTDIR="$DESTDIR" install
 '''
+
+[ai]
+kind = "cli"
+launch = "ping"
+keywords = ["ping", "network test", "hostname", "traceroute"]

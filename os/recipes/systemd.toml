@@ -43,7 +43,6 @@ HOOK
 '''
 
 [ai]
-kind = "cli"
-launch = "lsblk"
-keywords = ["disks", "mount", "partition", "dmesg", "kernel log"]
-
+kind = "service"
+launch = "systemctl"
+keywords = ["services", "boot", "logs", "journal", "network"]

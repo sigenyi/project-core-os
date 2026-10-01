@@ -23,3 +23,8 @@ cp bzip2-shared "$DESTDIR/usr/bin/bzip2"
 for i in bzcat bunzip2; do ln -sf bzip2 "$DESTDIR/usr/bin/$i"; done
 rm -f "$DESTDIR/usr/lib/libbz2.a"
 '''
+
+[ai]
+kind = "cli"
+launch = "bzip2"
+keywords = ["compress", "decompress", "bz2"]

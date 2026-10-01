@@ -17,9 +17,3 @@ script = '''
 make
 make DESTDIR="$DESTDIR" install
 '''
-
-[ai]
-kind = "cli"
-launch = "perl"
-keywords = ["perl", "script"]
-

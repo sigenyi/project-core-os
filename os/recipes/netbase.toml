@@ -16,8 +16,3 @@ install -Dm644 etc/services "$DESTDIR/etc/services"
 install -Dm644 etc/rpc "$DESTDIR/etc/rpc"
 install -Dm644 etc/ethertypes "$DESTDIR/etc/ethertypes"
 '''
-
-[ai]
-kind = "data"
-keywords = ["manual", "documentation"]
-

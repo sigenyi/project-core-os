@@ -18,9 +18,3 @@ make
 make DESTDIR="$DESTDIR" install
 rm -f "$DESTDIR/usr/lib/libltdl.a"
 '''
-
-[ai]
-kind = "cli"
-launch = "bash"
-keywords = ["shell", "terminal", "command line"]
-
