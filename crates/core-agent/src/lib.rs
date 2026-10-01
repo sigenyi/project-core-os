@@ -1,14 +1,43 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! The C.O.R.E. agent: the unprivileged orchestrator between the human, the local
+//! language model, the telemetry pipeline and the Guardian.
+//!
+//! Every external dependency is behind a trait so the loop can be tested and the
+//! pieces swapped independently:
+//!
+//! | trait                        | production                 | alternatives            |
+//! |------------------------------|----------------------------|-------------------------|
+//! | [`backend::InferenceBackend`] | llama.cpp `llama-server`   | rescue planner, scripts |
+//! | [`guardian::GuardianClient`]  | Unix socket                | in-process dry run      |
+//! | [`telemetry::TelemetryProvider`] | `core-sensed` snapshot | live / static           |
+//! | [`frontend::Frontend`]        | console shell              | test recorders          |
+//! | [`voice::Transcriber`]        | whisper.cpp                |                         |
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod backend;
+pub mod config;
+pub mod frontend;
+pub mod guardian;
+pub mod orchestrator;
+pub mod prompt;
+pub mod telemetry;
+pub mod voice;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+pub use config::AgentConfig;
+pub use frontend::{AgentEvent, ConfirmRequest, Frontend};
+pub use orchestrator::{Agent, Outcome};
+
+use std::time::Duration;
+
+use backend::{InferenceBackend, LlamaServer, RescuePlanner};
+use config::BackendKind;
+
+/// Build the inference backend described by the configuration.
+pub fn backend_from_config(config: &AgentConfig) -> Box<dyn InferenceBackend> {
+    match config.inference.backend {
+        BackendKind::Llama => Box::new(LlamaServer::new(
+            &config.inference.url,
+            config.inference.model.clone(),
+            Duration::from_secs(config.inference.timeout_secs),
+        )),
+        BackendKind::Rescue => Box::new(RescuePlanner),
     }
 }
