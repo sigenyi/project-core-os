@@ -17,10 +17,18 @@ use crate::risk::Risk;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamKind {
     /// Free text for the user to read.
-    Text { max_len: usize },
+    Text {
+        max_len: usize,
+    },
     /// A credential. Redacted in audit logs and confirmations.
-    Secret { min_len: usize, max_len: usize },
-    Integer { min: i64, max: i64 },
+    Secret {
+        min_len: usize,
+        max_len: usize,
+    },
+    Integer {
+        min: i64,
+        max: i64,
+    },
     Boolean,
     /// One of a fixed set of strings.
     Choice(&'static [&'static str]),
@@ -36,7 +44,9 @@ pub enum ParamKind {
     Interface,
     Program,
     /// A list of program arguments.
-    ArgList { max_items: usize },
+    ArgList {
+        max_items: usize,
+    },
 }
 
 impl ParamKind {
@@ -198,7 +208,6 @@ pub static CATALOG: &[ActionSpec] = &[
             opt("args", ParamKind::ArgList { max_items: 16 }, "command line arguments"),
         ],
         example: r#"{"program":"nano","args":["/home/core/notes.txt"]}"#),
-
     // ---- inspect -------------------------------------------------------------------
     action!("list_directory", Inspect, Guardian, Observe,
         "List the entries of a directory.",
@@ -274,7 +283,6 @@ pub static CATALOG: &[ActionSpec] = &[
         "Show whether a package is installed and its details.",
         params: [PACKAGE],
         example: r#"{"package":"firefox"}"#),
-
     // ---- low risk ------------------------------------------------------------------
     action!("set_volume", Hardware, Guardian, Low,
         "Set the main audio output volume.",
@@ -296,7 +304,6 @@ pub static CATALOG: &[ActionSpec] = &[
         "Start a stopped service.",
         params: [SERVICE],
         example: r#"{"service":"bluetooth"}"#),
-
     // ---- medium risk ---------------------------------------------------------------
     action!("stop_service", Services, Guardian, Medium,
         "Stop a running service.",
@@ -347,7 +354,6 @@ pub static CATALOG: &[ActionSpec] = &[
         "Change the system time zone.",
         params: [req("timezone", ParamKind::Timezone, "IANA time zone")],
         example: r#"{"timezone":"Europe/Berlin"}"#),
-
     // ---- high risk -----------------------------------------------------------------
     action!("install_package", Packages, Guardian, High,
         "Install a package from the repositories.",
@@ -402,8 +408,8 @@ mod tests {
     #[test]
     fn examples_are_json_objects_with_known_params() {
         for spec in CATALOG {
-            let value: serde_json::Value = serde_json::from_str(spec.example)
-                .unwrap_or_else(|e| panic!("{}: bad example: {e}", spec.name));
+            let value: serde_json::Value =
+                serde_json::from_str(spec.example).unwrap_or_else(|e| panic!("{}: bad example: {e}", spec.name));
             let obj = value.as_object().expect("example must be an object");
             for key in obj.keys() {
                 assert!(spec.param(key).is_some(), "{}: example uses unknown param {key}", spec.name);
@@ -428,7 +434,12 @@ mod tests {
                 && !spec.name.starts_with("list_")
                 && !matches!(
                     spec.name,
-                    "service_status" | "network_status" | "wifi_scan" | "ping_host" | "search_packages" | "package_info"
+                    "service_status"
+                        | "network_status"
+                        | "wifi_scan"
+                        | "ping_host"
+                        | "search_packages"
+                        | "package_info"
                 );
             if mutating {
                 assert!(spec.risk > Risk::Observe, "{} mutates but is marked observe", spec.name);

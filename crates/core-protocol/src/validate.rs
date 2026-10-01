@@ -38,9 +38,7 @@ fn check_first_alnum(value: &str, what: &str) -> Result {
 }
 
 fn no_control(value: &str, what: &str, allow_newlines: bool) -> Result {
-    check_charset(value, what, |c| {
-        !c.is_control() || (allow_newlines && (c == '\n' || c == '\t'))
-    })
+    check_charset(value, what, |c| !c.is_control() || (allow_newlines && (c == '\n' || c == '\t')))
 }
 
 /// Unit types the Guardian is willing to manage.
@@ -212,7 +210,14 @@ mod tests {
 
     #[test]
     fn service_names() {
-        for ok in ["wpa_supplicant", "bluetooth.service", "getty@tty2.service", "NetworkManager", "systemd-resolved.service", "fstrim.timer"] {
+        for ok in [
+            "wpa_supplicant",
+            "bluetooth.service",
+            "getty@tty2.service",
+            "NetworkManager",
+            "systemd-resolved.service",
+            "fstrim.timer",
+        ] {
             assert!(service_name(ok).is_ok(), "{ok}");
         }
         for bad in ["", "-foo", "--now", "foo bar", "a/b", "x.conf", "..service", "a;b", "$(reboot)"] {

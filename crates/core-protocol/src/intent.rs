@@ -66,8 +66,7 @@ impl Intent {
     /// first balanced top-level object is located and parsed.
     pub fn parse(text: &str) -> Result<Intent, IntentParseError> {
         let json = extract_json_object(text).ok_or(IntentParseError::NoJson)?;
-        let intent: Intent =
-            serde_json::from_str(json).map_err(|e| IntentParseError::Malformed(e.to_string()))?;
+        let intent: Intent = serde_json::from_str(json).map_err(|e| IntentParseError::Malformed(e.to_string()))?;
         if intent.action.trim().is_empty() {
             return Err(IntentParseError::Malformed("\"action\" is empty".into()));
         }
@@ -120,7 +119,8 @@ mod tests {
 
     #[test]
     fn parses_strict_output() {
-        let i = Intent::parse(r#"{"thought":"wifi is down","action":"restart_service","args":{"service":"iwd"}}"#).unwrap();
+        let i =
+            Intent::parse(r#"{"thought":"wifi is down","action":"restart_service","args":{"service":"iwd"}}"#).unwrap();
         assert_eq!(i.action, "restart_service");
         assert_eq!(i.args["service"], json!("iwd"));
         assert_eq!(i.thought.as_deref(), Some("wifi is down"));

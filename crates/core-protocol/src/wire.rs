@@ -18,11 +18,20 @@ pub const MAX_FRAME: usize = 1 << 20;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
-    Hello { client: String, protocol: u32 },
+    Hello {
+        client: String,
+        protocol: u32,
+    },
     /// Validate, authorise and (if allowed) execute an intent.
-    Execute { id: u64, intent: Intent },
+    Execute {
+        id: u64,
+        intent: Intent,
+    },
     /// Answer a pending confirmation. Must come from the same connection.
-    Confirm { token: String, approve: bool },
+    Confirm {
+        token: String,
+        approve: bool,
+    },
     /// Which actions this Guardian will accept, with effective risk/confirmation.
     Capabilities,
     Ping,
@@ -31,14 +40,35 @@ pub enum Request {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
-    Hello { server: String, protocol: u32, dry_run: bool },
-    Executed { id: u64, report: ExecutionReport },
+    Hello {
+        server: String,
+        protocol: u32,
+        dry_run: bool,
+    },
+    Executed {
+        id: u64,
+        report: ExecutionReport,
+    },
     /// The action is allowed only with explicit human approval.
-    ConfirmationRequired { id: u64, token: String, summary: String, risk: Risk, expires_in_secs: u64 },
-    Rejected { id: u64, kind: RejectKind, reason: String },
-    Capabilities { actions: Vec<Capability> },
+    ConfirmationRequired {
+        id: u64,
+        token: String,
+        summary: String,
+        risk: Risk,
+        expires_in_secs: u64,
+    },
+    Rejected {
+        id: u64,
+        kind: RejectKind,
+        reason: String,
+    },
+    Capabilities {
+        actions: Vec<Capability>,
+    },
     Pong,
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,7 +217,8 @@ mod tests {
 
     #[test]
     fn json_shape_is_tagged() {
-        let v = serde_json::to_value(Response::Rejected { id: 1, kind: RejectKind::Denied, reason: "no".into() }).unwrap();
+        let v =
+            serde_json::to_value(Response::Rejected { id: 1, kind: RejectKind::Denied, reason: "no".into() }).unwrap();
         assert_eq!(v, json!({"type": "rejected", "id": 1, "kind": "denied", "reason": "no"}));
     }
 

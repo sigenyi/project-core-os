@@ -12,6 +12,7 @@ pub mod catalog;
 pub mod choice;
 pub mod grammar;
 pub mod intent;
+pub mod logging;
 pub mod risk;
 pub mod time;
 pub mod validate;

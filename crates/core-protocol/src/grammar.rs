@@ -133,11 +133,7 @@ fn join(a: &str, b: &str) -> String {
 /// JSON integers without leading zeros, bounded in digit count by the range.
 fn integer_rule(min: i64, max: i64) -> String {
     let digits = min.unsigned_abs().max(max.unsigned_abs()).to_string().len();
-    let body = if digits <= 1 {
-        "[0-9]".to_string()
-    } else {
-        format!(r#"("0" | [1-9] [0-9]{{0,{}}})"#, digits - 1)
-    };
+    let body = if digits <= 1 { "[0-9]".to_string() } else { format!(r#"("0" | [1-9] [0-9]{{0,{}}})"#, digits - 1) };
     if min < 0 { format!(r#""-"? {body}"#) } else { body }
 }
 
@@ -147,10 +143,8 @@ fn rule_name(action: &str) -> String {
 
 /// Generate a GBNF grammar accepting exactly one intent object.
 pub fn gbnf(options: &GrammarOptions) -> String {
-    let specs: Vec<&ActionSpec> = CATALOG
-        .iter()
-        .filter(|s| options.actions.is_none_or(|allowed| allowed.contains(&s.name)))
-        .collect();
+    let specs: Vec<&ActionSpec> =
+        CATALOG.iter().filter(|s| options.actions.is_none_or(|allowed| allowed.contains(&s.name))).collect();
     assert!(!specs.is_empty(), "grammar needs at least one action");
 
     let mut b = Builder { used: BTreeMap::new() };

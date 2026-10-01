@@ -31,9 +31,8 @@ impl fmt::Display for ValidationError {
                 write!(f, "unknown action {name:?}; only the documented actions exist")
             }
             ValidationError::UnknownParam { action, param } => {
-                let known: Vec<_> = catalog::find(action)
-                    .map(|s| s.params.iter().map(|p| p.name).collect())
-                    .unwrap_or_default();
+                let known: Vec<_> =
+                    catalog::find(action).map(|s| s.params.iter().map(|p| p.name).collect()).unwrap_or_default();
                 if known.is_empty() {
                     write!(f, "{action} takes no arguments, but {param:?} was given")
                 } else {
@@ -280,8 +279,8 @@ impl ValidatedAction {
 
     /// Validate an untrusted intent.
     pub fn from_intent(intent: &Intent) -> Result<Self, ValidationError> {
-        let spec = catalog::find(intent.action.trim())
-            .ok_or_else(|| ValidationError::UnknownAction(intent.action.clone()))?;
+        let spec =
+            catalog::find(intent.action.trim()).ok_or_else(|| ValidationError::UnknownAction(intent.action.clone()))?;
         let mut a = Args::new(spec, &intent.args)?;
         use Action::*;
         let action = match spec.name {
@@ -308,9 +307,9 @@ impl ValidatedAction {
                 errors_only: a.opt_bool("errors_only")?.unwrap_or(false),
             },
             "service_status" => ServiceStatus { service: a.service()? },
-            "list_services" => ListServices {
-                state: a.opt_choice("state", ServiceFilter::parse)?.unwrap_or(ServiceFilter::Running),
-            },
+            "list_services" => {
+                ListServices { state: a.opt_choice("state", ServiceFilter::parse)?.unwrap_or(ServiceFilter::Running) }
+            }
             "disk_usage" => DiskUsage,
             "list_block_devices" => ListBlockDevices,
             "list_hardware" => ListHardware { bus: a.req_choice("bus", HardwareBus::parse)? },
@@ -320,10 +319,9 @@ impl ValidatedAction {
             },
             "network_status" => NetworkStatus,
             "wifi_scan" => WifiScan,
-            "ping_host" => PingHost {
-                host: a.req_typed("host", HostTarget::new)?,
-                count: a.opt_u32("count")?.unwrap_or(3),
-            },
+            "ping_host" => {
+                PingHost { host: a.req_typed("host", HostTarget::new)?, count: a.opt_u32("count")?.unwrap_or(3) }
+            }
             "search_packages" => SearchPackages { query: a.req_typed("query", PackageQuery::new)? },
             "package_info" => PackageInfo { package: a.package()? },
             "set_volume" => SetVolume { percent: a.req_u32("percent")? },
@@ -332,28 +330,18 @@ impl ValidatedAction {
             "restart_service" => RestartService { service: a.service()? },
             "start_service" => StartService { service: a.service()? },
             "stop_service" => StopService { service: a.service()? },
-            "enable_service" => EnableService {
-                service: a.service()?,
-                now: a.opt_bool("now")?.unwrap_or(false),
-            },
-            "disable_service" => DisableService {
-                service: a.service()?,
-                now: a.opt_bool("now")?.unwrap_or(false),
-            },
+            "enable_service" => EnableService { service: a.service()?, now: a.opt_bool("now")?.unwrap_or(false) },
+            "disable_service" => DisableService { service: a.service()?, now: a.opt_bool("now")?.unwrap_or(false) },
             "kill_process" => KillProcess {
                 pid: a.req_u32("pid")?,
                 signal: a.opt_choice("signal", Signal::parse)?.unwrap_or(Signal::Term),
             },
             "load_kernel_module" => LoadKernelModule { module: a.req_typed("module", KernelModule::new)? },
             "unload_kernel_module" => UnloadKernelModule { module: a.req_typed("module", KernelModule::new)? },
-            "wifi_connect" => WifiConnect {
-                ssid: a.req_typed("ssid", Ssid::new)?,
-                passphrase: a.opt_secret("passphrase")?,
-            },
-            "set_link" => SetLink {
-                interface: a.req_typed("interface", Interface::new)?,
-                up: a.req_bool("up")?,
-            },
+            "wifi_connect" => {
+                WifiConnect { ssid: a.req_typed("ssid", Ssid::new)?, passphrase: a.opt_secret("passphrase")? }
+            }
+            "set_link" => SetLink { interface: a.req_typed("interface", Interface::new)?, up: a.req_bool("up")? },
             "set_hostname" => SetHostname { hostname: a.req_typed("hostname", Hostname::new)? },
             "set_timezone" => SetTimezone { timezone: a.req_typed("timezone", Timezone::new)? },
             "install_package" => InstallPackage { package: a.package()? },
@@ -392,9 +380,7 @@ impl<'a> Args<'a> {
     }
 
     fn param(&self, name: &'static str) -> &'static catalog::ParamSpec {
-        self.spec
-            .param(name)
-            .unwrap_or_else(|| panic!("catalog entry {} lacks parameter {name}", self.spec.name))
+        self.spec.param(name).unwrap_or_else(|| panic!("catalog entry {} lacks parameter {name}", self.spec.name))
     }
 
     fn invalid(&self, param: &'static str, reason: impl Into<String>) -> ValidationError {
@@ -478,7 +464,11 @@ impl<'a> Args<'a> {
         Ok(Some(Secret(s.to_string())))
     }
 
-    fn opt_choice<T>(&mut self, name: &'static str, parse: fn(&str) -> Option<T>) -> Result<Option<T>, ValidationError> {
+    fn opt_choice<T>(
+        &mut self,
+        name: &'static str,
+        parse: fn(&str) -> Option<T>,
+    ) -> Result<Option<T>, ValidationError> {
         let Some(s) = self.opt_str(name)? else { return Ok(None) };
         let s = s.trim().to_ascii_lowercase();
         let value = parse(&s).ok_or_else(|| {
@@ -501,9 +491,9 @@ impl<'a> Args<'a> {
     fn opt_int(&mut self, name: &'static str) -> Result<Option<i64>, ValidationError> {
         let Some(raw) = self.raw(name) else { return Ok(None) };
         let value = match raw {
-            Value::Number(n) => n
-                .as_i64()
-                .or_else(|| n.as_f64().filter(|f| f.fract() == 0.0 && f.abs() < 1e15).map(|f| f as i64)),
+            Value::Number(n) => {
+                n.as_i64().or_else(|| n.as_f64().filter(|f| f.fract() == 0.0 && f.abs() < 1e15).map(|f| f as i64))
+            }
             Value::String(s) => s.trim().parse::<i64>().ok(),
             _ => None,
         }
