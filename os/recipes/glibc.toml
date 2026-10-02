@@ -99,10 +99,10 @@ find . -name '*.out' -exec grep -l 'Timed out' {} + > "$RESULTS/timeouts.txt" ||
 for t in $(sed -n 's/^\(FAIL\|XPASS\|ERROR\|UNRESOLVED\): //p' tests.sum); do
   [ -f "$t.out" ] && install -Dm644 "$t.out" "$RESULTS/out/$t.out"
 done
-# 7184 tests passed in the first full run; a much lower count means part of
-# the suite did not run.
+# 7252 tests passed once the build root became its own mount namespace; a much
+# lower count means part of the suite did not run.
 python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
-  --min-pass 7000 tests.sum
+  --min-pass 7150 tests.sum
 '''
 
 [runtime]
