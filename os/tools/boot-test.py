@@ -35,7 +35,18 @@ CHECKS = [
     ("packages", "cpkg list | wc -l", r"^\s*81\s*$"),
     ("package integrity", "cpkg verify && echo verify-ok", r"verify-ok"),
     ("library closure", "cpkg why glibc | head -3; echo why-ok", r"why-ok"),
-    ("compiler", "printf 'int main(){puts(\"hello from core\");}' > /tmp/t.c && gcc -include stdio.h /tmp/t.c -o /tmp/t && /tmp/t", r"hello from core"),
+    ("C compiler, glibc and kernel headers",
+     "printf '#include <errno.h>\\n#include <pthread.h>\\n#include <stdio.h>\\n#include <linux/limits.h>\\n"
+     "int main(void){printf(\"hello from core %%d %%d\\\\n\", EINVAL, PATH_MAX);}\\n' > /tmp/t.c"
+     " && gcc -Wall -Werror /tmp/t.c -o /tmp/t && /tmp/t", r"hello from core 22 4096"),
+    ("C++ compiler and threads",
+     "printf '#include <iostream>\\n#include <thread>\\nint main(){std::thread t([]{std::cout<<\"c++ ok\"<<std::endl;});t.join();}\\n'"
+     " > /tmp/t.cc && g++ -Wall -Werror /tmp/t.cc -o /tmp/tcc && /tmp/tcc", r"^c\+\+ ok"),
+    ("Graphite (isl)",
+     "printf 'void f(int*a){for(int i=0;i<64;i++)for(int j=0;j<64;j++)a[i]+=j;}\\n' > /tmp/g.c"
+     " && gcc -O2 -floop-nest-optimize -c /tmp/g.c -o /tmp/g.o && echo graphite-ok", r"graphite-ok"),
+    ("debugger", "gdb -nx -batch -ex 'python print(\"gdb python ok\")'", r"gdb python ok"),
+    ("FUSE", "test -c /dev/fuse && echo fuse-ok", r"fuse-ok"),
     ("python", "python3 -c 'import ssl, ctypes, bz2, lzma, zlib, readline; print(ssl.OPENSSL_VERSION)'", r"^OpenSSL 3\.5"),
     ("network", "networkctl --no-legend list | head -5; ip -4 -o addr show scope global | head -2", r"inet \d+\."),
     ("dns", "resolvectl status >/dev/null && echo resolved-ok", r"resolved-ok"),
