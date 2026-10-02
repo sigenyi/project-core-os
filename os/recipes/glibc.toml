@@ -86,7 +86,14 @@ check = '''
 # The test suite runs against the freshly built library in build/, inside the
 # build root. TIMEOUTFACTOR gives timing-sensitive tests room on a loaded machine.
 cd build
-TIMEOUTFACTOR=10 make -k check > "$RESULTS/make-check.log" 2>&1 || true
+# Run the suite unprivileged, as glibc's developers do: as root, limits such as
+# RLIMIT_NPROC are not enforced (stdlib/tst-system) and permission checks pass
+# that should fail. Tests that need root get it inside a user namespace from
+# glibc's test container.
+id tester >/dev/null 2>&1 || useradd -m -U tester
+chown -R tester:tester ..
+su tester -s /usr/bin/bash -c "PATH=$PATH TIMEOUTFACTOR=10 make -k check" > "$RESULTS/make-check.log" 2>&1 || true
+chown -R root:root ..
 cp tests.sum "$RESULTS/"
 find . -name '*.out' -exec grep -l 'Timed out' {} + > "$RESULTS/timeouts.txt" || true
 for t in $(sed -n 's/^\(FAIL\|XPASS\|ERROR\|UNRESOLVED\): //p' tests.sum); do
