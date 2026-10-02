@@ -88,6 +88,9 @@ LOCALES
 # GCC's suite must not run as root (permission tests, and root can write
 # anywhere). Use an unprivileged account in the build root.
 id tester >/dev/null 2>&1 || useradd -m -U tester
+# Some tests need the account to have a supplementary group (glibc's
+# stdlib/tst-secure-getenv makes a setgid program with it).
+id -nG tester | grep -qw users || usermod -a -G users tester
 chown -R tester:tester ..
 su tester -s /usr/bin/bash -c "PATH=$PATH LOCPATH=$L make -k -j$JOBS check" > "$RESULTS/make-check.log" 2>&1 || true
 chown -R root:root ..

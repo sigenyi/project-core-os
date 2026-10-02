@@ -91,6 +91,9 @@ cd build
 # that should fail. Tests that need root get it inside a user namespace from
 # glibc's test container.
 id tester >/dev/null 2>&1 || useradd -m -U tester
+# Some tests need the account to have a supplementary group (glibc's
+# stdlib/tst-secure-getenv makes a setgid program with it).
+id -nG tester | grep -qw users || usermod -a -G users tester
 chown -R tester:tester ..
 su tester -s /usr/bin/bash -c "PATH=$PATH TIMEOUTFACTOR=10 make -k check" > "$RESULTS/make-check.log" 2>&1 || true
 chown -R root:root ..
