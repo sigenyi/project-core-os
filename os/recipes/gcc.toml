@@ -11,6 +11,7 @@ urls = ["https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-15/gcc-15_15.2.0.orig
 inner = "gcc-15-15.2.0/gcc-15.2.0.tar.xz"
 
 [build]
+files = ["lib/compare-results.py", "gcc/expected-failures.txt"]
 script = '''
 # glibc 2.43's strchr returns const char * for a const argument (C23); libgomp
 # builds with -Werror and stores the result in a char *. It only reads it.
@@ -34,6 +35,24 @@ mv "$DESTDIR"/usr/lib/*gdb.py "$DESTDIR/usr/share/gdb/auto-load/usr/lib"
 echo 'int main(){return 0;}' > t.c
 "$DESTDIR/usr/bin/gcc" -B"$DESTDIR/usr/lib/gcc/$CORE_TGT/15.2.0/" t.c -o t
 readelf -l t | grep -q '/lib64/ld-linux-x86-64.so.2'
+'''
+check = '''
+cd build
+# Several tests recurse deeply; give them the stack the GCC developers assume.
+ulimit -s -H unlimited 2>/dev/null || true
+ulimit -s 32768 2>/dev/null || true
+ulimit -a > "$RESULTS/ulimit.txt"
+# GCC's suite must not run as root (permission tests, and root can write
+# anywhere). Use an unprivileged account in the build root.
+id tester >/dev/null 2>&1 || useradd -m -U tester
+chown -R tester:tester ..
+su tester -s /usr/bin/bash -c "PATH=$PATH make -k -j$JOBS check" > "$RESULTS/make-check.log" 2>&1 || true
+chown -R root:root ..
+../contrib/test_summary > "$RESULTS/test_summary.txt" 2>&1 || true
+find . \( -name '*.sum' -o -name '*.log' \) -path '*testsuite*' -exec cp --parents {} "$RESULTS/" \;
+find "$RESULTS" -name '*.log' -size +5M -exec xz -T0 {} +
+python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
+  --min-pass 1 $(find . -name '*.sum' -path '*testsuite*')
 '''
 
 [ai]

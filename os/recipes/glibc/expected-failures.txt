@@ -1,0 +1,3 @@
+# Test results for glibc that are expected to be bad on C.O.R.E. OS's build
+# machine, one "STATUS: test" line each, as it appears in the .sum files.
+# Every entry has a comment above it saying why it is expected.

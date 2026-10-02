@@ -36,6 +36,8 @@ pub struct Builder {
     pub jobs: usize,
     /// Rebuild even if the stamp says the recipe is up to date.
     pub force: bool,
+    /// Run recipes' test suites (`[build] check`) before packaging.
+    pub check: bool,
     /// Timestamp recorded in packages and exported as SOURCE_DATE_EPOCH.
     pub epoch: u64,
     mounts: Option<Mounts>,
@@ -52,12 +54,12 @@ fn io(path: &Path) -> impl Fn(std::io::Error) -> String + '_ {
 }
 
 impl Builder {
-    pub fn new(work: PathBuf, cache: PathBuf, jobs: usize, force: bool) -> Builder {
+    pub fn new(work: PathBuf, cache: PathBuf, jobs: usize, force: bool, check: bool) -> Builder {
         let epoch = std::env::var("SOURCE_DATE_EPOCH")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(|| SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
-        Builder { work, cache, jobs, force, epoch, mounts: None }
+        Builder { work, cache, jobs, force, check, epoch, mounts: None }
     }
 
     pub fn root(&self) -> PathBuf {
@@ -70,6 +72,15 @@ impl Builder {
 
     fn stamp_path(&self, r: &Recipe) -> PathBuf {
         self.work.join("state").join(&r.package.name)
+    }
+
+    /// Records that the recipe's test suite passed for this recipe hash.
+    fn checked_path(&self, r: &Recipe) -> PathBuf {
+        self.work.join("state").join(format!("{}.checked", r.package.name))
+    }
+
+    fn wants_check(&self, r: &Recipe) -> bool {
+        self.check && r.build.stage == Stage::Final && r.build.check.is_some()
     }
 
     fn recipe_hash(r: &Recipe) -> Result<String, String> {
@@ -94,6 +105,9 @@ impl Builder {
         let want = Self::recipe_hash(r)?;
         let have = fs::read_to_string(self.stamp_path(r)).unwrap_or_default();
         if have.trim() != want {
+            return Ok(false);
+        }
+        if self.wants_check(r) && fs::read_to_string(self.checked_path(r)).unwrap_or_default().trim() != want {
             return Ok(false);
         }
         if r.build.stage == Stage::Final {
@@ -150,8 +164,9 @@ impl Builder {
         if self.up_to_date(r)? {
             return Ok(Outcome::UpToDate);
         }
-        // Until this build succeeds, the recipe is not built.
+        // Until this build succeeds, the recipe is not built (or tested).
         let _ = fs::remove_file(self.stamp_path(r));
+        let _ = fs::remove_file(self.checked_path(r));
         source::fetch(r, &self.cache)?;
         let root = self.root();
         fs::create_dir_all(&root).map_err(io(&root))?;
@@ -202,12 +217,41 @@ impl Builder {
                 ]);
                 let cwd = format!("/{build_rel}/src");
                 run_script(Place::Chroot { root: &root, cwd: &cwd }, &r.build.script, &env, &log)?;
+                if self.wants_check(r) {
+                    self.run_check(r, &build_rel, &env)?;
+                }
                 self.package_and_install(r, &dest, &log)?;
             }
         }
         fs::remove_dir_all(&build_dir).map_err(io(&build_dir))?;
         self.write_stamp(r)?;
+        if self.wants_check(r) {
+            fs::write(self.checked_path(r), Self::recipe_hash(r)? + "\n").map_err(io(&self.checked_path(r)))?;
+        }
         Ok(Outcome::Built)
+    }
+
+    /// Run the recipe's test suite in its build tree. Whatever it leaves in
+    /// `$RESULTS` is copied to `<work>/logs/<name>-check/`, pass or fail.
+    fn run_check(&self, r: &Recipe, build_rel: &str, env: &[(String, String)]) -> Result<(), String> {
+        let root = self.root();
+        let name = &r.package.name;
+        let results_rel = format!("{build_rel}/results");
+        let results = root.join(&results_rel);
+        fs::create_dir_all(&results).map_err(io(&results))?;
+        let mut env = env.to_vec();
+        env.push(("RESULTS".into(), format!("/{results_rel}")));
+        let log = self.work.join("logs").join(format!("{name}.check.log"));
+        let cwd = format!("/{build_rel}/src");
+        let script = r.build.check.as_deref().unwrap_or_default();
+        let outcome = run_script(Place::Chroot { root: &root, cwd: &cwd }, script, &env, &log);
+        let saved = self.work.join("logs").join(format!("{name}-check"));
+        let _ = fs::remove_dir_all(&saved);
+        let copied = Command::new("cp").arg("-a").arg(&results).arg(&saved).status();
+        if !copied.is_ok_and(|s| s.success()) {
+            log::warn!("{name}: could not save test results to {}", saved.display());
+        }
+        outcome.map_err(|e| format!("test suite failed (results in {}): {e}", saved.display()))
     }
 
     fn package_and_install(&self, r: &Recipe, dest: &Path, log: &Path) -> Result<(), String> {
@@ -221,12 +265,14 @@ impl Builder {
             log::info!("{}: stripped {n} files", r.package.name);
         }
         let repo = self.repo();
-        // Drop older builds of this package from the repository.
+        let pkg = create_package(dest, r.manifest(self.epoch), &repo)?;
+        // Then drop older builds of this package (other versions) from the repository.
         if let Ok(rd) = fs::read_dir(&repo) {
             let prefix = format!("{}-", r.package.name);
             for e in rd.filter_map(|e| e.ok()) {
                 let file = e.file_name().to_string_lossy().into_owned();
-                if file.starts_with(&prefix)
+                if e.path() != pkg
+                    && file.starts_with(&prefix)
                     && file.ends_with(".cpk")
                     && core_pkg::archive::read_metadata(&e.path())
                         .is_ok_and(|m| m.manifest.package.name == r.package.name)
@@ -235,7 +281,6 @@ impl Builder {
                 }
             }
         }
-        let pkg = create_package(dest, r.manifest(self.epoch), &repo)?;
         check_ai_metadata(&pkg)?;
         let mut db = Db::open(&root)?;
         let _lock = db.lock()?;

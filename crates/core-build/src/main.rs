@@ -26,6 +26,10 @@ struct Cli {
     /// Rebuild recipes even when they are up to date.
     #[arg(long)]
     force: bool,
+    /// Run test suites (`[build] check`) before packaging; recipes whose tests
+    /// have not passed for their current version are rebuilt.
+    #[arg(long)]
+    check: bool,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -83,7 +87,7 @@ fn run_list(b: &mut Builder, list: &[Recipe]) -> Result<(), String> {
 
 fn run(cli: Cli) -> Result<(), String> {
     let jobs = cli.jobs.unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1));
-    let mut b = Builder::new(cli.work.clone(), cli.cache.clone(), jobs, cli.force);
+    let mut b = Builder::new(cli.work.clone(), cli.cache.clone(), jobs, cli.force, cli.check);
     match cli.cmd {
         Cmd::Fetch => {
             let (boot, world) = all_recipes(&cli.recipes)?;

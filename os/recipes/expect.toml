@@ -1,0 +1,41 @@
+[package]
+name = "expect"
+version = "5.45.4"
+summary = "Automates interactive programs (used by the DejaGnu test harness)"
+license = "LicenseRef-public-domain"
+homepage = "https://core.tcl-lang.org/expect/"
+
+[[source]]
+sha256 = "d082bf340fdb7a85b1e4e5df4d967d0140835db34a8a035c3102abb5eb62d450"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/universe/e/expect/expect_5.45.4.orig.tar.gz"]
+
+[build]
+script = '''
+# Expect drives programs through pseudo-terminals; fail early if there are none.
+python3 -c 'from pty import spawn; spawn(["echo", "ok"])' | grep -q ok
+# Expect 5.45.4 (2018) is K&R-era C. Its configure probes and sources use
+# implicit int, implicit declarations and old-style definitions, which GCC 15
+# rejects (C23 by default; GCC 14 made the rest errors), so the probes fail and
+# configure misdetects the terminal interface. Build it as the compilers it was
+# written for did: C17, with those diagnostics as warnings again.
+export CFLAGS="-O2 -std=gnu17 -Wno-error=implicit-int -Wno-error=implicit-function-declaration \
+  -Wno-error=incompatible-pointer-types -Wno-error=int-conversion"
+./configure --prefix=/usr --with-tcl=/usr/lib --enable-shared --disable-rpath \
+  --mandir=/usr/share/man --with-tclinclude=/usr/include
+# The terminal interface must be the POSIX one: termios with tcsetattr, driven
+# by pty_termios.c. (glibc's <termios.h> does not define TCGETS or TIOCGWINSZ;
+# Expect then takes them from <sys/ioctl.h>, as it should.)
+# Configure's results are -D flags on the Makefile's DEFS line.
+for def in HAVE_TERMIOS HAVE_TCSETATTR HAVE_OPENPTY; do
+  grep '^DEFS' Makefile | grep -q -- "-D$def=1"
+done
+grep -q '^PKG_SOURCES.*pty_termios\.c' Makefile
+make
+make DESTDIR="$DESTDIR" install
+ln -sf expect5.45.4/libexpect5.45.4.so "$DESTDIR/usr/lib"
+'''
+
+[ai]
+kind = "cli"
+launch = "expect"
+keywords = ["automate", "interactive"]

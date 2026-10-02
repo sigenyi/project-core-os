@@ -1,0 +1,34 @@
+[package]
+name = "tcl"
+version = "8.6.17"
+summary = "Tool Command Language interpreter (runs the DejaGnu test harness)"
+license = "TCL"
+homepage = "https://www.tcl-lang.org/"
+
+[[source]]
+sha256 = "a1748f61ae9de840b112bdefe8178118fbc35609d2b4f0a73f3b9e73da7f6530"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/t/tcl8.6/tcl8.6_8.6.17+dfsg.orig.tar.gz"]
+
+[build]
+script = '''
+# Debian's +dfsg tarball drops the bundled extension packages (pkgs/ is empty),
+# so only Tcl itself is built.
+SRCDIR=$(pwd)
+cd unix
+./configure --prefix=/usr --mandir=/usr/share/man --disable-rpath
+make
+# tclConfig.sh describes the build tree; point it at the installed locations.
+sed -e "s|$SRCDIR/unix|/usr/lib|" -e "s|$SRCDIR|/usr/include|" -i tclConfig.sh
+make DESTDIR="$DESTDIR" install
+make DESTDIR="$DESTDIR" install-private-headers
+chmod 644 "$DESTDIR/usr/lib/libtclstub8.6.a"
+chmod u+w "$DESTDIR/usr/lib/libtcl8.6.so"
+ln -sf tclsh8.6 "$DESTDIR/usr/bin/tclsh"
+# Avoid clashing with Perl's Thread(3) manual page.
+mv "$DESTDIR/usr/share/man/man3/Thread.3" "$DESTDIR/usr/share/man/man3/Tcl_Thread.3"
+'''
+
+[ai]
+kind = "cli"
+launch = "tclsh"
+keywords = ["tcl", "script"]

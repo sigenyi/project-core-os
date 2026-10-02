@@ -66,3 +66,7 @@ dkms.conf
 
 # systemd/sysctl drop-in directories are named *.d (C dependency files above)
 !*.d/
+
+# Python bytecode
+__pycache__/
+*.pyc

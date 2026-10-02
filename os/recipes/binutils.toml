@@ -12,6 +12,7 @@ urls = ["https://ftp.gnu.org/gnu/binutils/binutils-with-gold-2.46.tar.xz",
 file = "binutils_2.46.orig.tar.xz"
 
 [build]
+files = ["lib/compare-results.py", "binutils/expected-failures.txt"]
 script = '''
 mkdir build && cd build
 ../configure --prefix=/usr --sysconfdir=/etc --build="$CORE_TGT" --enable-ld=default \
@@ -20,4 +21,11 @@ mkdir build && cd build
 make tooldir=/usr
 make tooldir=/usr DESTDIR="$DESTDIR" install
 rm -f "$DESTDIR"/usr/lib/lib{bfd,ctf,ctf-nobfd,opcodes,sframe}.a
+'''
+check = '''
+cd build
+make -k check > "$RESULTS/make-check.log" 2>&1 || true
+find . \( -name '*.sum' -o -name '*.log' \) -path '*testsuite*' -exec cp --parents {} "$RESULTS/" \;
+python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
+  --min-pass 1 $(find . -name '*.sum' -path '*testsuite*')
 '''

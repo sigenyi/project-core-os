@@ -34,7 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: shellcheck -x os/tools/*.sh tools/*/*.sh
-      - run: python3 -m py_compile os/tools/*.py os/recipes/ca-certificates/*.py
+      - run: python3 -m py_compile os/tools/*.py os/recipes/*/*.py
+      - run: python3 os/recipes/lib/compare-results.py --self-test
 
   recipes:
     name: OS recipes parse and are complete

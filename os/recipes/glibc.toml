@@ -12,6 +12,7 @@ urls = ["https://ftp.gnu.org/gnu/glibc/glibc-2.43.tar.xz",
 file = "glibc_2.43.orig.tar.xz"
 
 [build]
+files = ["lib/compare-results.py", "glibc/expected-failures.txt"]
 script = '''
 # Linux 7.0's <linux/mount.h> spells OPEN_TREE_CLONE as (1 << 0); glibc 2.43
 # defines it textually differently, which is a redefinition error. Only define
@@ -62,6 +63,19 @@ paths = ["usr/lib/*.so*", "usr/local/lib/*.so*", "etc/ld.so.conf", "etc/ld.so.co
 exec = ["/usr/bin/ldconfig"]
 order = 10
 HOOK
+'''
+check = '''
+# The test suite runs against the freshly built library in build/, inside the
+# build root. TIMEOUTFACTOR gives timing-sensitive tests room on a loaded machine.
+cd build
+TIMEOUTFACTOR=10 make -k check > "$RESULTS/make-check.log" 2>&1 || true
+cp tests.sum "$RESULTS/"
+find . -name '*.out' -exec grep -l 'Timed out' {} + > "$RESULTS/timeouts.txt" || true
+for t in $(sed -n 's/^\(FAIL\|XPASS\|ERROR\|UNRESOLVED\): //p' tests.sum); do
+  [ -f "$t.out" ] && install -Dm644 "$t.out" "$RESULTS/out/$t.out"
+done
+python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
+  --min-pass 1 tests.sum
 '''
 
 [runtime]

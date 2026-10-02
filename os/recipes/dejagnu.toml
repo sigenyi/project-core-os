@@ -1,0 +1,26 @@
+[package]
+name = "dejagnu"
+version = "1.6.3"
+summary = "Test harness used by the binutils and GCC test suites"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/dejagnu/"
+
+[[source]]
+sha256 = "87daefacd7958b4a69f88c6856dbd1634261963c414079d0c371f589cd66a2e3"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/universe/d/dejagnu/dejagnu_1.6.3.orig.tar.gz"]
+
+[build]
+script = '''
+mkdir build && cd build
+../configure --prefix=/usr
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[runtime]
+depends = ["expect"]
+
+[ai]
+kind = "cli"
+launch = "runtest"
+keywords = ["test harness"]

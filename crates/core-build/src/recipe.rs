@@ -125,6 +125,11 @@ pub struct Build {
     #[serde(default)]
     pub stage: Stage,
     pub script: String,
+    /// Test suite, run with `core-build --check` in the build tree after `script`
+    /// and before packaging, so the packaged binaries are the tested ones. It must
+    /// fail on any unexpected test result; results go in `$RESULTS`.
+    #[serde(default)]
+    pub check: Option<String>,
     /// Strip binaries and libraries in the staged tree (final stage).
     #[serde(default = "yes")]
     pub strip: bool,
@@ -286,6 +291,17 @@ depends = ["glibc"]
         let m = r.manifest(0);
         assert_eq!(m.depends.packages, ["glibc"]);
         m.validate().unwrap();
+    }
+
+    #[test]
+    fn check_script_is_optional() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("sed.toml"), SED).unwrap();
+        assert!(Recipe::load(&dir.path().join("sed.toml")).unwrap().build.check.is_none());
+        let with_check = SED.replace("script = \"make\"", "script = \"make\"\ncheck = \"make check\"");
+        fs::write(dir.path().join("sed.toml"), with_check).unwrap();
+        let r = Recipe::load(&dir.path().join("sed.toml")).unwrap();
+        assert_eq!(r.build.check.as_deref(), Some("make check"));
     }
 
     #[test]

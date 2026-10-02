@@ -28,7 +28,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$REPO" ] && [ -n "$KEY" ] && [ -n "$OUT" ] || { sed -n '4p' "$0" >&2; exit 2; }
+if [ -z "$REPO" ] || [ -z "$KEY" ] || [ -z "$OUT" ]; then sed -n '4p' "$0" >&2; exit 2; fi
 [ "$(id -u)" = 0 ] || { echo "must run as root" >&2; exit 1; }
 for t in sfdisk mkfs.ext4 mkfs.vfat mmd mcopy losetup; do
   command -v "$t" >/dev/null || { echo "missing host tool: $t" >&2; exit 1; }
@@ -41,10 +41,10 @@ R="$work/root"
 loop=''
 dirloop=''
 cleanup() {
-  mountpoint -q "$R/mnt/grub" && umount "$R/mnt/grub" || true
-  [ -n "$dirloop" ] && losetup -d "$dirloop" 2>/dev/null || true
-  [ -n "$loop" ] && losetup -d "$loop" 2>/dev/null || true
-  mountpoint -q "$R/dev" && umount -l "$R/dev" || true
+  if mountpoint -q "$R/mnt/grub"; then umount "$R/mnt/grub" || true; fi
+  if [ -n "$dirloop" ]; then losetup -d "$dirloop" 2>/dev/null || true; fi
+  if [ -n "$loop" ]; then losetup -d "$loop" 2>/dev/null || true; fi
+  if mountpoint -q "$R/dev"; then umount -l "$R/dev" || true; fi
   rm -rf "$work"
 }
 trap cleanup EXIT
