@@ -39,8 +39,11 @@ sed -i 's/^\(test-xfail-tst-ifunc-isa-[12]\(-static\)\? = \)\$(with-lld)$/\1$(fi
 test "$(grep -c 'filter yes,$(with-lld)' sysdeps/x86/Makefile)" = 4
 mkdir build && cd build
 echo "rootsbindir=/usr/sbin" > configparms
+# --enable-hardcoded-path-in-tests only changes how test programs are linked; it
+# lets elf/tst-env-setuid check AT_SECURE environment filtering.
 ../configure --prefix=/usr --disable-werror --disable-nscd libc_cv_slibdir=/usr/lib \
-  --enable-stack-protector=strong --enable-kernel=5.10
+  --enable-stack-protector=strong --enable-kernel=5.10 \
+  --enable-hardcoded-path-in-tests
 make
 mkdir -p "$DESTDIR/etc"
 touch "$DESTDIR/etc/ld.so.conf"

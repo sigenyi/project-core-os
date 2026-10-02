@@ -8,11 +8,10 @@
 use std::fs;
 use std::os::unix::fs::{MetadataExt, symlink};
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
 
 use core_pkg::elf;
 
-use crate::env::CHROOT;
+use crate::env::command_in_root;
 
 const MOVES: &[(&str, &str)] = &[
     ("bin", "usr/bin"),
@@ -186,9 +185,7 @@ pub fn strip(dest: &Path, root: &Path) -> Result<usize, String> {
     for (flag, list) in [("--strip-debug", debug_only), ("--strip-unneeded", unneeded)] {
         for chunk in list.chunks(200) {
             // strip processes every file even when some fail (e.g. a script named .a).
-            let out = Command::new(CHROOT)
-                .arg(root)
-                .arg("/usr/bin/strip")
+            let out = command_in_root(root, "/usr/bin/strip")?
                 .arg(flag)
                 .args(chunk)
                 .output()

@@ -1,12 +1,62 @@
 //! Where build scripts run: on the host (cross stage) or inside the new root.
 
+use std::ffi::CString;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, BufReader};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-/// Absolute, because build scripts run with an empty environment (no PATH).
-pub const CHROOT: &str = "/usr/sbin/chroot";
+fn check(ret: libc::c_int) -> io::Result<()> {
+    if ret == -1 { Err(io::Error::last_os_error()) } else { Ok(()) }
+}
+
+/// A command that runs `program` (a path inside `root`) with `root` as its
+/// filesystem root.
+///
+/// Unlike chroot(2), the child gets its own mount namespace whose root *is* the
+/// build root (bind-mounted onto itself, then pivot_root), as bubblewrap and
+/// systemd-nspawn do. Inside a plain chroot the kernel refuses new user
+/// namespaces and private mounts, which disables glibc's container-based tests.
+/// The virtual filesystems mounted under `root` (see [`Mounts`]) come along with
+/// the recursive bind mount.
+pub fn command_in_root(root: &Path, program: &str) -> Result<Command, String> {
+    let root_c = CString::new(root.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
+    let slash = CString::new("/").unwrap();
+    let dot = CString::new(".").unwrap();
+    let mut cmd = Command::new(program);
+    // SAFETY: the closure runs in the forked child before exec and only makes
+    // async-signal-safe system calls on strings allocated before the fork.
+    unsafe {
+        cmd.pre_exec(move || {
+            check(libc::unshare(libc::CLONE_NEWNS))?;
+            // Keep our mounts from propagating back to the host.
+            check(libc::mount(
+                std::ptr::null(),
+                slash.as_ptr(),
+                std::ptr::null(),
+                libc::MS_REC | libc::MS_PRIVATE,
+                std::ptr::null(),
+            ))?;
+            check(libc::mount(
+                root_c.as_ptr(),
+                root_c.as_ptr(),
+                std::ptr::null(),
+                libc::MS_BIND | libc::MS_REC,
+                std::ptr::null(),
+            ))?;
+            check(libc::chdir(root_c.as_ptr()))?;
+            // pivot_root(".", ".") stacks the old root on top of the new one;
+            // detaching "." then leaves only the build root.
+            check(libc::syscall(libc::SYS_pivot_root, dot.as_ptr(), dot.as_ptr()) as libc::c_int)?;
+            check(libc::umount2(dot.as_ptr(), libc::MNT_DETACH))?;
+            check(libc::chdir(slash.as_ptr()))?;
+            Ok(())
+        });
+    }
+    Ok(cmd)
+}
 
 /// The kernel's virtual filesystems mounted inside the build root, unmounted on drop.
 pub struct Mounts {
@@ -88,13 +138,9 @@ pub fn run_script(place: Place, script: &str, env: &[(String, String)], log: &Pa
             c
         }
         Place::Chroot { root, cwd } => {
-            let mut c = Command::new(CHROOT);
-            c.arg(root).arg("/usr/bin/env").arg("-i");
-            for (k, v) in env {
-                c.arg(format!("{k}={v}"));
-            }
-            c.arg("/bin/bash").arg("+h").arg("-c").arg(format!("cd {cwd}\n{body}"));
-            c.env_clear();
+            let mut c = command_in_root(root, "/usr/bin/bash")?;
+            c.arg("+h").arg("-c").arg(format!("cd {cwd}\n{body}"));
+            c.env_clear().envs(env.iter().map(|(k, v)| (k, v)));
             c
         }
     };

@@ -17,6 +17,8 @@ CONFIG_NLS_CODEPAGE_437=y
 CONFIG_NLS_ISO8859_1=y
 CONFIG_NLS_UTF8=y
 CONFIG_EFI_PARTITION=y
+# User-space file systems (sshfs, AppImage, rclone mounts)
+CONFIG_FUSE_FS=y
 # Boot and firmware
 CONFIG_EFI=y
 CONFIG_EFI_STUB=y
@@ -51,6 +53,8 @@ CONFIG_ZSWAP=y
 CONFIG_CRYPTO_LZ4=y
 CONFIG_CRYPTO_ZSTD=y
 CONFIG_TRANSPARENT_HUGEPAGE=y
+# Named anonymous memory regions in /proc/<pid>/maps (helps diagnose memory use)
+CONFIG_ANON_VMA_NAME=y
 # Display: standalone programs are shown through DRM/KMS
 CONFIG_DRM=y
 CONFIG_DRM_SIMPLEDRM=y

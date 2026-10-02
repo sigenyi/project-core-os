@@ -1,0 +1,27 @@
+[package]
+name = "gdb"
+version = "17.1"
+summary = "GNU debugger"
+license = "GPL-3.0-or-later"
+homepage = "https://www.sourceware.org/gdb/"
+
+[[source]]
+sha256 = "14996f5f74c9f68f5a543fdc45bca7800207f91f92aeea6c2e791822c7c6d876"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/g/gdb/gdb_17.1.orig.tar.xz"]
+
+[build]
+script = '''
+mkdir build && cd build
+../configure --prefix=/usr --with-system-readline --with-python=/usr/bin/python3 \
+  --with-system-zlib --with-zstd --with-lzma --with-expat --disable-werror
+make
+make -C gdb DESTDIR="$DESTDIR" install
+make -C gdbserver DESTDIR="$DESTDIR" install
+# The debugger must start and have its Python support.
+./gdb/gdb -nx -batch -data-directory ./gdb/data-directory -ex 'python print("gdb-python-ok")' | grep -q gdb-python-ok
+'''
+
+[ai]
+kind = "cli"
+launch = "gdb"
+keywords = ["debugger", "debug", "backtrace", "crash", "core dump"]

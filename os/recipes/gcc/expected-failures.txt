@@ -1,3 +1,56 @@
-# Test results for gcc that are expected to be bad on C.O.R.E. OS's build
-# machine, one "STATUS: test" line each, as it appears in the .sum files.
+# Test results for GCC that are expected to be bad on C.O.R.E. OS, one
+# "STATUS: test" line each, as it appears in the merged .sum files.
 # Every entry has a comment above it saying why it is expected.
+
+# glibc 2.43 makes strchr (and bsearch, memchr, strpbrk, strrchr, strstr and the
+# wcs*/wmemchr functions) const-preserving macros in C23, GCC 15's default
+# dialect. test_3 then gets a correct "discards 'const'" warning, and the
+# analyzer's over-read and uninitialized-read reports are located inside glibc's
+# macro in <string.h>, where GCC suppresses warnings by default; -Wsystem-headers
+# shows both, and with -std=gnu17 every expected diagnostic appears. This is a
+# known issue for users too (docs/BASE-OS.md): ordinary warnings such as
+# -Wnonnull at these calls are also hidden in C23.
+FAIL: gcc.dg/analyzer/strchr-1.c  (test for warnings, line 32)
+FAIL: gcc.dg/analyzer/strchr-1.c  (test for warnings, line 39)
+FAIL: gcc.dg/analyzer/strchr-1.c (test for excess errors)
+FAIL: gcc.dg/analyzer/strchr-1.c event at line 33 (test for warnings, line 32)
+FAIL: gcc.dg/analyzer/strchr-1.c event at line 40 (test for warnings, line 39)
+
+# These tests load a test-only analyzer plugin (analyzer_cpython_plugin.cc, not
+# installed) against the installed Python 3.14 headers, which it predates: it
+# crashes on PyObject's anonymous ob_refcnt union (get_field_by_name() reads the
+# NULL DECL_NAME of the unnamed member) and expects PyLongObject's ob_digit
+# where Python >= 3.12 has moved it into long_value. The compiler itself
+# compiles all three tests cleanly without the plugin.
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 17)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 28)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 36)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 39)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 41)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 42)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  at line 18 (test for warnings, line 17)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  at line 43 (test for warnings, line 42)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so (internal compiler error: Segmentation fault)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so (test for excess errors)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 17)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 18)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 21)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 29)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  at line 37 (test for warnings, line 36)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so (internal compiler error: Segmentation fault)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so (test for excess errors)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 17)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 18)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 21)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 29)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  at line 37 (test for warnings, line 36)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so (internal compiler error: Segmentation fault)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so (test for excess errors)
+
+# The optimization under test happens (four scalar vaddsd loads from r), but
+# with --enable-default-pie GCC prints the operands as "40+r(%rip)" and the
+# test's patterns only accept "r+40".
+FAIL: gcc.target/i386/pr90579.c scan-assembler vaddsd\tr\\+16
+FAIL: gcc.target/i386/pr90579.c scan-assembler vaddsd\tr\\+24
+FAIL: gcc.target/i386/pr90579.c scan-assembler vaddsd\tr\\+32
+FAIL: gcc.target/i386/pr90579.c scan-assembler vaddsd\tr\\+40

@@ -1,0 +1,22 @@
+[package]
+name = "linux-api-headers"
+version = "7.0"
+summary = "Linux kernel API headers (linux/, asm/, ...) for building userspace programs"
+license = "GPL-2.0-only WITH Linux-syscall-note"
+homepage = "https://www.kernel.org/"
+
+[[source]]
+sha256 = "c6343795c8c7e4feff55f5b309365c8e0eaf49cd6abcb412e32315313f149536"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/l/linux/linux_7.0.0.orig.tar.gz"]
+
+[build]
+script = '''
+make mrproper
+make headers
+find usr/include -type f ! -name '*.h' -delete
+mkdir -p "$DESTDIR/usr"
+cp -r usr/include "$DESTDIR/usr"
+# glibc's own headers include these; a C program using <errno.h> needs them.
+test -f "$DESTDIR/usr/include/linux/errno.h"
+test -f "$DESTDIR/usr/include/asm/errno.h"
+'''

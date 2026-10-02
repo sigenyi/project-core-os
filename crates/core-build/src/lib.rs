@@ -9,5 +9,6 @@
 pub mod builder;
 pub mod env;
 pub mod post;
+pub mod prune;
 pub mod recipe;
 pub mod source;
