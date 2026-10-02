@@ -1,3 +1,17 @@
 # Test results for glibc that are expected to be bad on C.O.R.E. OS's build
-# machine, one "STATUS: test" line each, as it appears in the .sum files.
+# machine, one "STATUS: test" line each, as it appears in tests.sum.
 # Every entry has a comment above it saying why it is expected.
+
+# The lchmod/fchmodat checks themselves pass. The test then enters a new mount
+# namespace, which cannot be made private inside a chroot ("/" is not a mount
+# point), and from there the kernel reports open descriptors by their path from
+# the real root (/var/tmp/.../build/...) instead of the chroot's (/build/...).
+# glibc's descriptor-leak check sees the renamed descriptors and fails the test.
+FAIL: io/tst-lchmod
+
+# "Header not provided by glibc": glibc expects these link-namespace checks to
+# fail because it ships no <ndbm.h>. The build root has gdbm's compatibility
+# <ndbm.h> in /usr/include, so the checks find a header and pass.
+XPASS: conform/UNIX98/ndbm.h/linknamespace
+XPASS: conform/XOPEN2K/ndbm.h/linknamespace
+XPASS: conform/XOPEN2K8/ndbm.h/linknamespace

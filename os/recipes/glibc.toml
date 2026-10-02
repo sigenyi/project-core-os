@@ -22,6 +22,12 @@ sed -i -e 's|^#define OPEN_TREE_CLONE    1 .*|#ifndef OPEN_TREE_CLONE\n# define 
   sysdeps/unix/sysv/linux/sys/mount.h
 grep -q '^#ifndef OPEN_TREE_CLONE' sysdeps/unix/sysv/linux/sys/mount.h
 sed -e '/test-installation/s@$(PERL)@echo not running@' -i Makefile
+# The tst-ifunc-isa tests are meant to be expected failures only when linking
+# with lld, but glibc tests the flag for being non-empty and with-lld is "no"
+# otherwise, so they would be marked as expected failures with GNU ld too.
+sed -i 's/^\(test-xfail-tst-ifunc-isa-[12]\(-static\)\? = \)\$(with-lld)$/\1$(filter yes,$(with-lld))/' \
+  sysdeps/x86/Makefile
+test "$(grep -c 'filter yes,$(with-lld)' sysdeps/x86/Makefile)" = 4
 mkdir build && cd build
 echo "rootsbindir=/usr/sbin" > configparms
 ../configure --prefix=/usr --disable-werror --disable-nscd libc_cv_slibdir=/usr/lib \
@@ -74,8 +80,10 @@ find . -name '*.out' -exec grep -l 'Timed out' {} + > "$RESULTS/timeouts.txt" ||
 for t in $(sed -n 's/^\(FAIL\|XPASS\|ERROR\|UNRESOLVED\): //p' tests.sum); do
   [ -f "$t.out" ] && install -Dm644 "$t.out" "$RESULTS/out/$t.out"
 done
+# 7184 tests passed in the first full run; a much lower count means part of
+# the suite did not run.
 python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
-  --min-pass 1 tests.sum
+  --min-pass 7000 tests.sum
 '''
 
 [runtime]
