@@ -1,0 +1,18 @@
+[package]
+name = "xz-temp"
+version = "5.8.3"
+summary = "xz (temporary)"
+
+[[source]]
+sha256 = "fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6"
+urls = ["https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/x/xz-utils/xz-utils_5.8.3.orig.tar.xz"]
+file = "xz-utils_5.8.3.orig.tar.xz"
+
+[build]
+stage = "cross"
+script = '''
+./configure --prefix=/usr --host="$LFS_TGT" --build="$(build-aux/config.guess)" --disable-static --docdir=/usr/share/doc/xz
+make
+make DESTDIR="$LFS" install
+'''

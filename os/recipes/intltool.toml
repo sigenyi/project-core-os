@@ -1,0 +1,18 @@
+[package]
+name = "intltool"
+version = "0.51.0"
+summary = "Internationalisation tool for translatable files"
+license = "GPL-2.0-or-later"
+homepage = "https://freedesktop.org/wiki/Software/intltool"
+
+[[source]]
+sha256 = "67c74d94196b153b774ab9f89b2fa6c6ba79352407037c8c14d5aeb334e959cd"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/universe/i/intltool/intltool_0.51.0.orig.tar.gz"]
+
+[build]
+script = '''
+sed -i 's:\\\${:\\\$\\{:' intltool-update.in
+./configure --prefix=/usr
+make
+make DESTDIR="$DESTDIR" install
+'''

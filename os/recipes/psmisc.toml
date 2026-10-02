@@ -1,0 +1,24 @@
+[package]
+name = "psmisc"
+version = "23.7"
+summary = "Process tools (killall, pstree, fuser)"
+license = "GPL-2.0-or-later"
+homepage = "https://gitlab.com/psmisc/psmisc"
+
+[[source]]
+sha256 = "58c55d9c1402474065adae669511c191de374b0871eec781239ab400b907c327"
+urls = ["https://sourceforge.net/projects/psmisc/files/psmisc/psmisc-23.7.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/p/psmisc/psmisc_23.7.orig.tar.xz"]
+file = "psmisc_23.7.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr 
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "pstree"
+keywords = ["kill process", "process tree"]

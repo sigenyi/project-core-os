@@ -1,0 +1,32 @@
+[Unit]
+Description=C.O.R.E. speech recognition (whisper.cpp server, optional)
+Documentation=https://github.com/sigenyi/project-core-os/blob/main/docs/MODELS.md
+ConditionPathExists=/usr/share/core/models/whisper.bin
+
+# Optional: by default the shell runs whisper-cli per utterance, keeping no model in
+# RAM. Enable this unit (and set voice.transcriber = "whisper-server" in agent.toml)
+# for lower latency at the cost of resident memory.
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/core/whisper/bin/whisper-server --model /usr/share/core/models/whisper.bin --host 127.0.0.1 --port 8081
+Restart=on-failure
+DynamicUser=yes
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

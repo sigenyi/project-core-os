@@ -1,0 +1,30 @@
+[package]
+name = "python"
+version = "3.14.4"
+summary = "Python 3 interpreter"
+license = "PSF-2.0"
+homepage = "https://www.python.org/"
+
+[[source]]
+sha256 = "d923c51303e38e249136fc1bdf3568d56ecb03214efdef48516176d3d7faaef8"
+urls = ["https://www.python.org/ftp/python/3.14.4/Python-3.14.4.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/p/python3.14/python3.14_3.14.4.orig.tar.xz"]
+file = "python3.14_3.14.4.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --enable-shared --with-system-expat --without-static-libpython
+make
+make DESTDIR="$DESTDIR" install
+ln -sf python3 "$DESTDIR/usr/bin/python"
+ln -sf pip3 "$DESTDIR/usr/bin/pip"
+cat > "$DESTDIR/usr/lib/python3.14/EXTERNALLY-MANAGED" <<EM
+[externally-managed]
+Error=System Python packages are managed by cpkg. Use a virtual environment (python3 -m venv) for your own packages.
+EM
+'''
+
+[ai]
+kind = "cli"
+launch = "python3"
+keywords = ["python", "programming", "script"]

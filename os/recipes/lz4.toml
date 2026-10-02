@@ -1,0 +1,18 @@
+[package]
+name = "lz4"
+version = "1.10.0"
+summary = "LZ4 fast compressor and library"
+license = "BSD-2-Clause AND GPL-2.0-or-later"
+homepage = "https://lz4.org/"
+
+[[source]]
+sha256 = "537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b"
+urls = ["https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/l/lz4/lz4_1.10.0.orig.tar.gz"]
+file = "lz4_1.10.0.orig.tar.gz"
+
+[build]
+script = '''
+make BUILD_STATIC=no PREFIX=/usr
+make BUILD_STATIC=no PREFIX=/usr DESTDIR="$DESTDIR" install
+'''

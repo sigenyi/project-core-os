@@ -1,0 +1,19 @@
+[package]
+name = "acl"
+version = "2.3.2"
+summary = "Access control list tools and library"
+license = "LGPL-2.1-or-later AND GPL-2.0-or-later"
+homepage = "https://savannah.nongnu.org/projects/acl"
+
+[[source]]
+sha256 = "97203a72cae99ab89a067fe2210c1cbf052bc492b479eca7d226d9830883b0bd"
+urls = ["https://download.savannah.gnu.org/releases/acl/acl-2.3.2.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/a/acl/acl_2.3.2.orig.tar.xz"]
+file = "acl_2.3.2.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-static --docdir=/usr/share/doc/acl-2.3.2
+make
+make DESTDIR="$DESTDIR" install
+'''

@@ -1,0 +1,19 @@
+[package]
+name = "texinfo"
+version = "7.2"
+summary = "Documentation system (info reader)"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/texinfo/"
+
+[[source]]
+sha256 = "0329d7788fbef113fa82cb80889ca197a344ce0df7646fe000974c5d714363a6"
+urls = ["https://ftp.gnu.org/gnu/texinfo/texinfo-7.2.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/t/texinfo/texinfo_7.2.orig.tar.xz"]
+file = "texinfo_7.2.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr
+make
+make DESTDIR="$DESTDIR" install
+'''

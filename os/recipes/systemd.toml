@@ -1,0 +1,52 @@
+[package]
+name = "systemd"
+version = "259.5"
+summary = "System and service manager, udev, journald, networkd, resolved"
+license = "LGPL-2.1-or-later AND GPL-2.0-or-later"
+homepage = "https://systemd.io/"
+
+[[source]]
+sha256 = "80ed55a8a69c4bd1fb12a36659303372b37baf9ee224ef4f032db4b748be0f76"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/systemd_259.5.orig.tar.gz"]
+
+[build]
+script = '''
+sed -e 's/GROUP="render"/GROUP="video"/' -e 's/GROUP="sgx", //' -i rules.d/50-udev-default.rules.in
+mkdir build && cd build
+meson setup .. --prefix=/usr --buildtype=release -D mode=release \
+  -D default-dnssec=no -D firstboot=false -D install-tests=false -D tests=false \
+  -D ldconfig=false -D sysusers=true -D rpmmacrosdir=no -D homed=disabled \
+  -D userdb=false -D man=disabled -D pam=disabled -D pamconfdir=no \
+  -D dev-kvm-mode=0660 -D nobody-group=nogroup -D sysupdate=disabled -D ukify=disabled \
+  -D docdir=/usr/share/doc/systemd-259.5
+ninja
+DESTDIR="$DESTDIR" ninja install
+mkdir -p "$DESTDIR/usr/share/cpkg/hooks"
+cat > "$DESTDIR/usr/share/cpkg/hooks/systemd-sysusers.toml" <<HOOK
+description = "Creating system users and groups"
+paths = ["usr/lib/sysusers.d/*.conf"]
+exec = ["/usr/bin/systemd-sysusers"]
+order = 20
+HOOK
+cat > "$DESTDIR/usr/share/cpkg/hooks/systemd-hwdb.toml" <<HOOK
+description = "Updating the hardware database"
+paths = ["usr/lib/udev/hwdb.d/*"]
+exec = ["/usr/bin/systemd-hwdb", "update", "--usr"]
+order = 30
+HOOK
+cat > "$DESTDIR/usr/share/cpkg/hooks/systemd-presets.toml" <<HOOK
+description = "Enabling services according to presets"
+paths = ["usr/lib/systemd/system/*.service", "usr/lib/systemd/system/*.socket", "usr/lib/systemd/system/*.timer", "usr/lib/systemd/system-preset/*"]
+exec = ["/usr/bin/systemctl", "preset-all", "--preset-mode=enable-only"]
+order = 60
+HOOK
+'''
+
+[runtime]
+# systemd loads these with dlopen(), which ELF analysis cannot see.
+depends = ["util-linux", "libcap", "kmod", "libseccomp", "acl", "libxcrypt", "xz", "zstd", "lz4"]
+
+[ai]
+kind = "service"
+launch = "systemctl"
+keywords = ["services", "boot", "logs", "journal", "network"]

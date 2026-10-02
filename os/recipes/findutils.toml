@@ -1,0 +1,24 @@
+[package]
+name = "findutils"
+version = "4.10.0"
+summary = "File search tools (find, xargs, locate)"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/findutils/"
+
+[[source]]
+sha256 = "1387e0b67ff247d2abde998f90dfbf70c1491391a59ddfecb8ae698789f0a4f5"
+urls = ["https://ftp.gnu.org/gnu/findutils/findutils-4.10.0.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/f/findutils/findutils_4.10.0.orig.tar.xz"]
+file = "findutils_4.10.0.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --localstatedir=/var/lib/locate
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "find"
+keywords = ["find file", "search files", "locate"]

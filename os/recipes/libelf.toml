@@ -1,0 +1,23 @@
+[package]
+name = "libelf"
+version = "0.194"
+summary = "ELF object file access library (from elfutils)"
+license = "LGPL-3.0-or-later OR GPL-2.0-or-later"
+homepage = "https://sourceware.org/elfutils/"
+
+[[source]]
+sha256 = "09e2ff033d39baa8b388a2d7fbc5390bfde99ae3b7c67c7daaf7433fbcf0f01e"
+urls = ["https://sourceware.org/elfutils/ftp/0.194/elfutils-0.194.tar.bz2",
+        "https://archive.ubuntu.com/ubuntu/pool/main/e/elfutils/elfutils_0.194.orig.tar.bz2"]
+file = "elfutils_0.194.orig.tar.bz2"
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-debuginfod --enable-libdebuginfod=dummy
+# Only libelf is packaged, so only it and its internal helper library are built.
+make -C lib
+make -C libelf
+make -C libelf DESTDIR="$DESTDIR" install
+install -Dm644 config/libelf.pc "$DESTDIR/usr/lib/pkgconfig/libelf.pc"
+rm -f "$DESTDIR/usr/lib/libelf.a"
+'''

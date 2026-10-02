@@ -1,0 +1,36 @@
+[package]
+name = "nano"
+version = "8.7.1"
+summary = "Small, friendly text editor"
+license = "GPL-3.0-or-later"
+homepage = "https://www.nano-editor.org/"
+
+[[source]]
+sha256 = "76f0dcb248f2e2f1251d4ecd20fd30fb400a360a3a37c6c340e0a52c2d1cdedf"
+urls = ["https://ftp.gnu.org/gnu/nano/nano-8.7.1.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/n/nano/nano_8.7.1.orig.tar.xz"]
+file = "nano_8.7.1.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --sysconfdir=/etc --enable-utf8 --docdir=/usr/share/doc/nano-8.7.1
+make
+make DESTDIR="$DESTDIR" install
+install -d "$DESTDIR/etc"
+cat > "$DESTDIR/etc/nanorc" <<RC
+set autoindent
+set constantshow
+set fill 72
+set historylog
+set multibuffer
+set positionlog
+set quickblank
+set regexp
+include "/usr/share/nano/*.nanorc"
+RC
+'''
+
+[ai]
+kind = "tui"
+launch = "nano"
+keywords = ["text editor", "editor", "edit file", "notepad"]

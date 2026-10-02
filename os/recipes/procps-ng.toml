@@ -1,0 +1,29 @@
+[package]
+name = "procps-ng"
+version = "4.0.4"
+summary = "Process monitoring tools (ps, top, free, uptime, kill)"
+license = "GPL-2.0-or-later AND LGPL-2.1-or-later"
+homepage = "https://gitlab.com/procps-ng/procps"
+
+[[source]]
+sha256 = "22870d6feb2478adb617ce4f09a787addaf2d260c5a8aa7b17d889a962c5e42e"
+urls = ["https://sourceforge.net/projects/procps-ng/files/Production/procps-ng-4.0.4.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/p/procps/procps_4.0.4.orig.tar.xz"]
+file = "procps_4.0.4.orig.tar.xz"
+
+[build]
+script = '''
+# Our ncurses is built wide-character only and installs its headers directly in
+# /usr/include, so <ncurses.h> is the wide header Debian puts in ncursesw/.
+sed -i 's|<ncursesw/ncurses.h>|<ncurses.h>|' src/watch.c
+if grep -q 'ncursesw/ncurses.h' src/watch.c; then exit 1; fi
+./configure --prefix=/usr --docdir=/usr/share/doc/procps-ng-4.0.4 --disable-static \
+  --disable-kill --enable-watch8bit --with-systemd
+make src_w_LDADD='$(LDADD) -lsystemd'
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "tui"
+launch = "top"
+keywords = ["processes", "memory usage", "cpu usage", "task manager", "kill"]

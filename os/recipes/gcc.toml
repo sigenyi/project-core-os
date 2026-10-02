@@ -1,0 +1,61 @@
+[package]
+name = "gcc"
+version = "15.2.0"
+summary = "GNU compiler collection (C and C++)"
+license = "GPL-3.0-or-later WITH GCC-exception-3.1"
+homepage = "https://gcc.gnu.org/"
+
+[[source]]
+sha256 = "3063dafdeed9fb9565f099b2560379bce08dae2b461ed4e30dd8d999f5f5747c"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-15/gcc-15_15.2.0.orig.tar.gz"]
+inner = "gcc-15-15.2.0/gcc-15.2.0.tar.xz"
+
+[build]
+files = ["lib/compare-results.py", "gcc/expected-failures.txt"]
+script = '''
+# glibc 2.43's strchr returns const char * for a const argument (C23); libgomp
+# builds with -Werror and stores the result in a char *. It only reads it.
+sed -i "s/^\(\s*\)char \*q = strchr (p + 1, '}');/\1const char *q = strchr (p + 1, '}');/" libgomp/affinity-fmt.c
+grep -q "const char \*q = strchr (p + 1, '}');" libgomp/affinity-fmt.c
+sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+mkdir build && cd build
+../configure --prefix=/usr --build="$CORE_TGT" LD=ld --enable-languages=c,c++ \
+  --enable-default-pie --enable-default-ssp --enable-host-pie --disable-multilib \
+  --disable-bootstrap --disable-fixincludes --with-system-zlib
+make
+make DESTDIR="$DESTDIR" install
+ln -sr "$DESTDIR/usr/bin/cpp" "$DESTDIR/usr/lib"
+ln -sf gcc.1 "$DESTDIR/usr/share/man/man1/cc.1"
+ln -sf gcc "$DESTDIR/usr/bin/cc"
+mkdir -p "$DESTDIR/usr/lib/bfd-plugins"
+ln -sf "../../libexec/gcc/$CORE_TGT/15.2.0/liblto_plugin.so" "$DESTDIR/usr/lib/bfd-plugins/"
+mkdir -p "$DESTDIR/usr/share/gdb/auto-load/usr/lib"
+mv "$DESTDIR"/usr/lib/*gdb.py "$DESTDIR/usr/share/gdb/auto-load/usr/lib"
+# Sanity check with the new compiler in place of the temporary one.
+echo 'int main(){return 0;}' > t.c
+"$DESTDIR/usr/bin/gcc" -B"$DESTDIR/usr/lib/gcc/$CORE_TGT/15.2.0/" t.c -o t
+readelf -l t | grep -q '/lib64/ld-linux-x86-64.so.2'
+'''
+check = '''
+cd build
+# Several tests recurse deeply; give them the stack the GCC developers assume.
+ulimit -s -H unlimited 2>/dev/null || true
+ulimit -s 32768 2>/dev/null || true
+ulimit -a > "$RESULTS/ulimit.txt"
+# GCC's suite must not run as root (permission tests, and root can write
+# anywhere). Use an unprivileged account in the build root.
+id tester >/dev/null 2>&1 || useradd -m -U tester
+chown -R tester:tester ..
+su tester -s /usr/bin/bash -c "PATH=$PATH make -k -j$JOBS check" > "$RESULTS/make-check.log" 2>&1 || true
+chown -R root:root ..
+../contrib/test_summary > "$RESULTS/test_summary.txt" 2>&1 || true
+find . \( -name '*.sum' -o -name '*.log' \) -path '*testsuite*' -exec cp --parents {} "$RESULTS/" \;
+find "$RESULTS" -name '*.log' -size +5M -exec xz -T0 {} +
+python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
+  --min-pass 1 $(find . -name '*.sum' -path '*testsuite*')
+'''
+
+[ai]
+kind = "cli"
+launch = "gcc"
+keywords = ["compiler", "c compiler", "c++"]

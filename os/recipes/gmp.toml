@@ -1,0 +1,23 @@
+[package]
+name = "gmp"
+version = "6.3.0"
+summary = "Arbitrary precision arithmetic library"
+license = "LGPL-3.0-or-later OR GPL-2.0-or-later"
+homepage = "https://gmplib.org/"
+
+[[source]]
+sha256 = "bd2966e6d277f79328e894a5a9f3ba3fbf2ed2be81def5f48623e30c23fb1572"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/g/gmp/gmp_6.3.0+dfsg.orig.tar.xz"]
+
+[build]
+script = '''
+# The +dfsg tarball has no doc/ directory.
+sed -i 's| doc/Makefile||' configure
+sed -i 's/ tune doc$/ tune/' Makefile.in
+sed -i '/long long t1;/,+1s/()/(...)/' configure
+# A plain x86_64 build triplet selects generic code that runs on every x86_64 CPU.
+./configure --prefix=/usr --enable-cxx --disable-static --build=x86_64-pc-linux-gnu \
+  --docdir=/usr/share/doc/gmp-6.3.0
+make
+make DESTDIR="$DESTDIR" install
+'''

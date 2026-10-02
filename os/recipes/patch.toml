@@ -1,0 +1,19 @@
+[package]
+name = "patch"
+version = "2.8"
+summary = "Apply diffs to files"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/patch/"
+
+[[source]]
+sha256 = "f87cee69eec2b4fcbf60a396b030ad6aa3415f192aa5f7ee84cad5e11f7f5ae3"
+urls = ["https://ftp.gnu.org/gnu/patch/patch-2.8.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/p/patch/patch_2.8.orig.tar.xz"]
+file = "patch_2.8.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr 
+make
+make DESTDIR="$DESTDIR" install
+'''

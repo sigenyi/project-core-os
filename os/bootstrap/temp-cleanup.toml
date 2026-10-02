@@ -1,0 +1,12 @@
+[package]
+name = "temp-cleanup"
+version = "1"
+summary = "Remove the cross toolchain and temporary documentation"
+
+[build]
+stage = "temp"
+script = '''
+rm -rf /usr/share/{info,man,doc}/*
+find /usr/lib /usr/libexec -name '*.la' -delete
+rm -rf /tools
+'''

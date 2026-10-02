@@ -1,0 +1,25 @@
+[package]
+name = "iproute2"
+version = "6.19.0"
+summary = "Network configuration tools (ip, ss, tc)"
+license = "GPL-2.0-or-later"
+homepage = "https://wiki.linuxfoundation.org/networking/iproute2"
+
+[[source]]
+sha256 = "9332213d35480b647086a70c302de8568de83455a98774d35de216c4ce191006"
+urls = ["https://www.kernel.org/pub/linux/utils/net/iproute2/iproute2-6.19.0.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/i/iproute2/iproute2_6.19.0.orig.tar.xz"]
+file = "iproute2_6.19.0.orig.tar.xz"
+
+[build]
+script = '''
+sed -i /ARPD/d Makefile
+rm -f man/man8/arpd.8
+make NETNS_RUN_DIR=/run/netns
+make SBINDIR=/usr/sbin DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "ip"
+keywords = ["network", "ip address", "routes", "sockets"]

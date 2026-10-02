@@ -1,0 +1,22 @@
+[package]
+name = "zstd"
+version = "1.5.7"
+summary = "Zstandard compressor and library"
+license = "BSD-3-Clause OR GPL-2.0-only"
+homepage = "https://facebook.github.io/zstd/"
+
+[[source]]
+sha256 = "0c092ef267edce57ba7f3f2645c861f72eaf5e76273c6c3632869423464b90a5"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/libz/libzstd/libzstd_1.5.7+dfsg.orig.tar.xz"]
+
+[build]
+script = '''
+make prefix=/usr
+make prefix=/usr DESTDIR="$DESTDIR" install
+rm -f "$DESTDIR/usr/lib/libzstd.a"
+'''
+
+[ai]
+kind = "cli"
+launch = "zstd"
+keywords = ["compress", "decompress", "zstandard"]

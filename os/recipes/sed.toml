@@ -1,0 +1,24 @@
+[package]
+name = "sed"
+version = "4.9"
+summary = "GNU stream editor"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/sed/"
+
+[[source]]
+sha256 = "6e226b732e1cd739464ad6862bd1a1aba42d7982922da7a53519631d24975181"
+urls = ["https://ftp.gnu.org/gnu/sed/sed-4.9.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/s/sed/sed_4.9.orig.tar.xz"]
+file = "sed_4.9.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr 
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "sed"
+keywords = ["stream editor", "replace text"]

@@ -1,0 +1,28 @@
+[package]
+name = "ncurses-temp"
+version = "6.6"
+summary = "ncurses (temporary)"
+
+[[source]]
+sha256 = "e280541f4f601b8586bec305976c873fd641607f9bc4254bf661034dcccac4e9"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/n/ncurses/ncurses_6.6+20251231.orig.tar.gz"]
+
+[build]
+stage = "cross"
+script = '''
+mkdir build
+pushd build
+  ../configure --prefix="$LFS/tools" AWK=gawk
+  make -C include
+  make -C progs tic
+  install progs/tic "$LFS/tools/bin"
+popd
+./configure --prefix=/usr --host="$LFS_TGT" --build="$(./config.guess)" \
+  --mandir=/usr/share/man --with-manpage-format=normal --with-shared \
+  --without-normal --with-cxx-shared --without-debug --without-ada \
+  --disable-stripping AWK=gawk
+make
+make DESTDIR="$LFS" install
+ln -sf libncursesw.so "$LFS/usr/lib/libncurses.so"
+sed -e 's/^#if.*XOPEN.*$/#if 1/' -i "$LFS/usr/include/curses.h"
+'''

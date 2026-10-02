@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+rust-version = "1.85"
+repository = "https://github.com/sigenyi/project-core-os"
+authors = ["C.O.R.E. OS contributors"]
+
+[workspace.dependencies]
+core-protocol = { path = "crates/core-protocol" }
+core-sense = { path = "crates/core-sense" }
+core-guardian = { path = "crates/core-guardian" }
+core-agent = { path = "crates/core-agent" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

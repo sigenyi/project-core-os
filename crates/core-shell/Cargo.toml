@@ -1,0 +1,16 @@
+[package]
+name = "core-shell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+core-agent.workspace = true
+core-guardian.workspace = true
+core-protocol.workspace = true
+clap = { version = "4.6.7", features = ["derive"] }
+libc = "0.2.189"
+log = "0.4.34"
+rustyline = "18.0.1"

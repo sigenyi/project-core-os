@@ -1,0 +1,18 @@
+[package]
+name = "netbase"
+version = "6.5"
+summary = "Network protocol and service name databases (/etc/services, /etc/protocols)"
+license = "GPL-2.0-only"
+homepage = "https://salsa.debian.org/md/netbase"
+
+[[source]]
+sha256 = "72537146c8ca2f504405d49d1ec74ebbaff506a7651cf1a05f9c21167dfd71ae"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/n/netbase/netbase_6.5build1.tar.xz"]
+
+[build]
+script = '''
+install -Dm644 etc/protocols "$DESTDIR/etc/protocols"
+install -Dm644 etc/services "$DESTDIR/etc/services"
+install -Dm644 etc/rpc "$DESTDIR/etc/rpc"
+install -Dm644 etc/ethertypes "$DESTDIR/etc/ethertypes"
+'''

@@ -1,0 +1,25 @@
+[package]
+name = "grep"
+version = "3.12"
+summary = "GNU grep"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/grep/"
+
+[[source]]
+sha256 = "2649b27c0e90e632eadcd757be06c6e9a4f48d941de51e7c0f83ff76408a07b9"
+urls = ["https://ftp.gnu.org/gnu/grep/grep-3.12.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/g/grep/grep_3.12.orig.tar.xz"]
+file = "grep_3.12.orig.tar.xz"
+
+[build]
+script = '''
+sed -i "s/echo/#echo/" src/egrep.sh
+./configure --prefix=/usr
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "grep"
+keywords = ["search text", "find in files"]

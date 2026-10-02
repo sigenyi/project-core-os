@@ -1,0 +1,26 @@
+[package]
+name = "bash"
+version = "5.3"
+summary = "GNU Bourne-again shell"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/bash/"
+
+[[source]]
+sha256 = "a70de6bb41f5e192534a5a1836b1d7fad9a8d4818a6e1506d70f38441552c17a"
+urls = ["https://ftp.gnu.org/gnu/bash/bash-5.3.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/b/bash/bash_5.3.orig.tar.xz"]
+file = "bash_5.3.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --without-bash-malloc --with-installed-readline \
+  --docdir=/usr/share/doc/bash-5.3
+make
+make DESTDIR="$DESTDIR" install
+ln -sf bash "$DESTDIR/usr/bin/sh"
+'''
+
+[ai]
+kind = "cli"
+launch = "bash"
+keywords = ["shell", "terminal", "command line"]

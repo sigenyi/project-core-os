@@ -1,0 +1,19 @@
+[package]
+name = "gdbm"
+version = "1.26"
+summary = "GNU database manager library"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/gdbm/"
+
+[[source]]
+sha256 = "6a24504a14de4a744103dcb936be976df6fbe88ccff26065e54c1c47946f4a5e"
+urls = ["https://ftp.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/g/gdbm/gdbm_1.26.orig.tar.gz"]
+file = "gdbm_1.26.orig.tar.gz"
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-static --enable-libgdbm-compat
+make
+make DESTDIR="$DESTDIR" install
+'''

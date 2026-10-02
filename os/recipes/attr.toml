@@ -1,0 +1,19 @@
+[package]
+name = "attr"
+version = "2.5.2"
+summary = "Extended attribute tools and library"
+license = "LGPL-2.1-or-later AND GPL-2.0-or-later"
+homepage = "https://savannah.nongnu.org/projects/attr"
+
+[[source]]
+sha256 = "f2e97b0ab7ce293681ab701915766190d607a1dba7fae8a718138150b700a70b"
+urls = ["https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/a/attr/attr_2.5.2.orig.tar.xz"]
+file = "attr_2.5.2.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-static --sysconfdir=/etc --docdir=/usr/share/doc/attr-2.5.2
+make
+make DESTDIR="$DESTDIR" install
+'''

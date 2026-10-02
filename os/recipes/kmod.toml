@@ -1,0 +1,25 @@
+[package]
+name = "kmod"
+version = "34.2"
+summary = "Kernel module tools (modprobe, lsmod, depmod)"
+license = "LGPL-2.1-or-later AND GPL-2.0-or-later"
+homepage = "https://github.com/kmod-project/kmod"
+
+[[source]]
+sha256 = "012d16e2099115486d8aa9f2c2a23d058d3d0cad83113a60512647d25d3869e8"
+urls = ["https://www.kernel.org/pub/linux/utils/kernel/kmod/kmod-34.2.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/k/kmod/kmod_34.2.orig.tar.xz"]
+file = "kmod_34.2.orig.tar.xz"
+
+[build]
+script = '''
+meson setup build --prefix=/usr --buildtype=release -D manpages=false -D docs=false \
+  -D zstd=enabled -D xz=enabled -D zlib=enabled -D openssl=disabled
+ninja -C build
+DESTDIR="$DESTDIR" ninja -C build install
+'''
+
+[ai]
+kind = "cli"
+launch = "lsmod"
+keywords = ["kernel module", "driver", "modprobe"]

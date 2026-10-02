@@ -1,0 +1,23 @@
+[package]
+name = "man-pages"
+version = "6.17"
+summary = "Linux manual pages for system calls, library functions and file formats"
+license = "GPL-2.0-or-later AND others"
+homepage = "https://www.kernel.org/doc/man-pages/"
+
+[[source]]
+sha256 = "78a60c882cbdb843fbf84915754277e4e7fda987f2078e851e32480be7ec5461"
+urls = ["https://www.kernel.org/pub/linux/docs/man-pages/man-pages-6.17.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/m/manpages/manpages_6.17.orig.tar.xz"]
+file = "manpages_6.17.orig.tar.xz"
+
+[build]
+script = '''
+# libxcrypt documents crypt(3) itself.
+rm -f man/man3/crypt*
+make -R GIT=false prefix=/usr DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "data"
+keywords = ["manual", "documentation"]

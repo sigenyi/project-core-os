@@ -1,0 +1,24 @@
+[package]
+name = "xz"
+version = "5.8.3"
+summary = "XZ/LZMA compressor and library"
+license = "0BSD AND GPL-2.0-or-later"
+homepage = "https://tukaani.org/xz/"
+
+[[source]]
+sha256 = "fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6"
+urls = ["https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/x/xz-utils/xz-utils_5.8.3.orig.tar.xz"]
+file = "xz-utils_5.8.3.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-static --docdir=/usr/share/doc/xz-5.8.3
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "xz"
+keywords = ["compress", "decompress", "xz", "lzma"]

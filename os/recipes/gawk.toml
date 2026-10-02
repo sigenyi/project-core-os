@@ -1,0 +1,25 @@
+[package]
+name = "gawk"
+version = "5.3.2"
+summary = "GNU awk"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/gawk/"
+
+[[source]]
+sha256 = "3b2a95bc6de68e2dc833ce547e366d62001274f8b892c6424f34f70d321cda70"
+urls = ["https://ftp.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/g/gawk/gawk_5.3.2.orig.tar.xz"]
+file = "gawk_5.3.2.orig.tar.xz"
+
+[build]
+script = '''
+# Ubuntu's tarball omits the GFDL manual sources: build the man pages only, and
+# skip awklib, whose example programs are extracted from the manual.
+sed -i 's/ doc awklib po / doc po /' Makefile.in
+sed -i -e '/^INFO_DEPS = .*\\$/,/[^\\]$/d' -e '/^TEXINFO_TEX = /i INFO_DEPS =' doc/Makefile.in
+sed -i 's/extras//' Makefile.in
+./configure --prefix=/usr
+make
+make DESTDIR="$DESTDIR" LN='ln -f' install
+ln -sf gawk.1 "$DESTDIR/usr/share/man/man1/awk.1"
+'''

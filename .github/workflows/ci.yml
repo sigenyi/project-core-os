@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # llama.cpp release used to validate the grammar and the end-to-end path.
+  LLAMA_REF: b11312
+
+jobs:
+  rust:
+    name: fmt, clippy, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+
+  scripts:
+    name: shellcheck, python tools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck -x os/tools/*.sh tools/*/*.sh
+      - run: python3 -m py_compile os/tools/*.py os/recipes/*/*.py
+      - run: python3 os/recipes/lib/compare-results.py --self-test
+
+  recipes:
+    name: OS recipes parse and are complete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The cpkg package takes the binary built here.
+      - run: cargo build -q --release -p core-pkg
+      # Loads every recipe in os/bootstrap and os/recipes, checks names, checksums,
+      # repository files and that ORDER lists each recipe exactly once.
+      - run: cargo run -q -p core-build -- --work "$RUNNER_TEMP/w" --recipes os status
+
+  llama:
+    name: grammar and end-to-end against llama.cpp
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v4
+        with:
+          path: ~/llama.cpp
+          key: llama-${{ env.LLAMA_REF }}-static-v1
+      - name: Build llama.cpp (static, portable)
+        run: |
+          if [ ! -x ~/llama.cpp/build/bin/llama-server ]; then
+            rm -rf ~/llama.cpp
+            git clone --depth 1 --branch "$LLAMA_REF" https://github.com/ggml-org/llama.cpp ~/llama.cpp
+            cmake -S ~/llama.cpp -B ~/llama.cpp/build -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_SHARED_LIBS=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=OFF \
+              -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF
+            cmake --build ~/llama.cpp/build --target llama llama-server -j "$(nproc)"
+          fi
+      - run: pip install numpy
+      - name: Grammar accepted by llama.cpp's GBNF engine
+        run: LLAMA_CPP_DIR=$HOME/llama.cpp tools/gbnf-check/run.sh
+      - name: End to end with a live llama-server
+        run: LLAMA_CPP_DIR=$HOME/llama.cpp tools/e2e/run.sh

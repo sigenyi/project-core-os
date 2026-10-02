@@ -1,0 +1,21 @@
+[package]
+name = "tzdata"
+version = "2026a"
+summary = "Time zone database"
+license = "LicenseRef-public-domain"
+homepage = "https://www.iana.org/time-zones"
+
+[[source]]
+sha256 = "77b541725937bb53bd92bd484c0b43bec8545e2d3431ee01f04ef8f2203ba2b7"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/t/tzdata/tzdata_2026a.orig.tar.gz"]
+strip = 0
+
+[build]
+script = '''
+Z="$DESTDIR/usr/share/zoneinfo"
+mkdir -p "$Z"
+for tz in etcetera southamerica northamerica europe africa antarctica asia australasia backward; do
+  zic -L /dev/null -d "$Z" "$tz"
+done
+cp zone.tab zone1970.tab iso3166.tab "$Z"
+'''

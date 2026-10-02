@@ -1,0 +1,24 @@
+[package]
+name = "ncurses"
+version = "6.6"
+summary = "Terminal handling library"
+license = "MIT"
+homepage = "https://invisible-island.net/ncurses/"
+
+[[source]]
+sha256 = "e280541f4f601b8586bec305976c873fd641607f9bc4254bf661034dcccac4e9"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/n/ncurses/ncurses_6.6+20251231.orig.tar.gz"]
+
+[build]
+script = '''
+./configure --prefix=/usr --mandir=/usr/share/man --with-shared --without-debug \
+  --without-normal --with-cxx-shared --enable-pc-files --with-pkg-config-libdir=/usr/lib/pkgconfig
+make
+make DESTDIR="$DESTDIR" install
+sed -e 's/^#if.*XOPEN.*$/#if 1/' -i "$DESTDIR/usr/include/curses.h"
+for lib in ncurses form panel menu; do
+  ln -sf "lib${lib}w.so" "$DESTDIR/usr/lib/lib${lib}.so"
+  ln -sf "${lib}w.pc" "$DESTDIR/usr/lib/pkgconfig/${lib}.pc"
+done
+ln -sf libncursesw.so "$DESTDIR/usr/lib/libcurses.so"
+'''

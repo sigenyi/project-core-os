@@ -1,0 +1,25 @@
+[package]
+name = "openssl"
+version = "3.5.5"
+summary = "TLS and cryptography toolkit"
+license = "Apache-2.0"
+homepage = "https://www.openssl.org/"
+
+[[source]]
+sha256 = "b28c91532a8b65a1f983b4c28b7488174e4a01008e29ce8e69bd789f28bc2a89"
+urls = ["https://github.com/openssl/openssl/releases/download/openssl-3.5.5/openssl-3.5.5.tar.gz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/o/openssl/openssl_3.5.5.orig.tar.gz"]
+file = "openssl_3.5.5.orig.tar.gz"
+
+[build]
+script = '''
+./config --prefix=/usr --openssldir=/etc/ssl --libdir=lib shared zlib-dynamic
+make
+make DESTDIR="$DESTDIR" MANSUFFIX=ssl install_sw install_ssldirs install_man_docs
+rm -f "$DESTDIR"/usr/lib/lib{crypto,ssl}.a
+'''
+
+[ai]
+kind = "cli"
+launch = "openssl"
+keywords = ["tls", "certificate", "encryption"]

@@ -1,0 +1,38 @@
+[package]
+name = "binutils"
+version = "2.46"
+summary = "Assembler, linker and binary tools"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/binutils/"
+
+[[source]]
+sha256 = "a389850c2d3919f2cc96fb8b5e7711eacfc819259aaffb11615c9fb9756eaeae"
+urls = ["https://ftp.gnu.org/gnu/binutils/binutils-with-gold-2.46.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/b/binutils/binutils_2.46.orig.tar.xz"]
+file = "binutils_2.46.orig.tar.xz"
+
+[build]
+files = ["lib/compare-results.py", "binutils/expected-failures.txt"]
+script = '''
+mkdir build && cd build
+../configure --prefix=/usr --sysconfdir=/etc --build="$CORE_TGT" --enable-ld=default \
+  --enable-plugins --enable-shared --disable-werror --enable-64-bit-bfd \
+  --enable-new-dtags --with-system-zlib --enable-default-hash-style=gnu --enable-gprofng=no
+make tooldir=/usr
+make tooldir=/usr DESTDIR="$DESTDIR" install
+rm -f "$DESTDIR"/usr/lib/lib{bfd,ctf,ctf-nobfd,opcodes,sframe}.a
+'''
+check = '''
+cd build
+make -k check > "$RESULTS/make-check.log" 2>&1 || true
+# Each suite writes <tool>.sum in its own directory. All five must be there, or a
+# suite did not run.
+sums=$(find . -name '*.sum' | sort)
+for tool in binutils gas ld libctf libsframe; do
+  printf '%s\n' $sums | grep -q "/$tool\.sum$" || { echo "no $tool.sum: that suite did not run" >&2; exit 1; }
+done
+for f in $sums; do cp --parents "$f" "$RESULTS/"; [ -f "${f%.sum}.log" ] && cp --parents "${f%.sum}.log" "$RESULTS/"; done
+# 5900 tests passed across these suites in the first full run.
+python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
+  --min-pass 5800 $sums
+'''

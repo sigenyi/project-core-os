@@ -1,0 +1,28 @@
+[package]
+name = "util-linux"
+version = "2.41.3"
+summary = "System utilities (mount, fdisk, lsblk, dmesg, ...)"
+license = "GPL-2.0-or-later AND others"
+homepage = "https://github.com/util-linux/util-linux"
+
+[[source]]
+sha256 = "3330d873f0fceb5560b89a7dc14e4f3288bbd880e96903ed9b50ec2b5799e58b"
+urls = ["https://www.kernel.org/pub/linux/utils/util-linux/v2.41/util-linux-2.41.3.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/u/util-linux/util-linux_2.41.3.orig.tar.xz"]
+file = "util-linux_2.41.3.orig.tar.xz"
+
+[build]
+script = '''
+./configure --bindir=/usr/bin --libdir=/usr/lib --runstatedir=/run --sbindir=/usr/sbin \
+  --disable-chfn-chsh --disable-login --disable-nologin --disable-su --disable-setpriv \
+  --disable-runuser --disable-pylibmount --disable-liblastlog2 --disable-static \
+  --without-python --without-systemd --without-systemdsystemunitdir \
+  ADJTIME_PATH=/var/lib/hwclock/adjtime --docdir=/usr/share/doc/util-linux-2.41.3
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "lsblk"
+keywords = ["disks", "mount", "partition", "dmesg", "kernel log"]

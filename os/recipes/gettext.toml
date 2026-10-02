@@ -1,0 +1,20 @@
+[package]
+name = "gettext"
+version = "0.23.2"
+summary = "Internationalisation tools"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/gettext/"
+
+[[source]]
+sha256 = "86bec63472ae1e7a18871758a1358a9e9776f74643992a0276dd67e36de2da7d"
+urls = ["https://ftp.gnu.org/gnu/gettext/gettext-0.23.2.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/g/gettext/gettext_0.23.2.orig.tar.xz"]
+file = "gettext_0.23.2.orig.tar.xz"
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-static --docdir=/usr/share/doc/gettext-0.23.2
+make
+make DESTDIR="$DESTDIR" install
+chmod 0755 "$DESTDIR/usr/lib/preloadable_libintl.so"
+'''

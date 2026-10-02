@@ -1,0 +1,22 @@
+[package]
+name = "tar"
+version = "1.35"
+summary = "GNU tar archiver"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/tar/"
+
+[[source]]
+sha256 = "9ae57e981c1e73c0eebc2b26c9b0c4497fe310ef1d516ea430efb5470b71f7a8"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/t/tar/tar_1.35+dfsg.orig.tar.xz"]
+
+[build]
+script = '''
+FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "tar"
+keywords = ["archive", "extract", "tarball"]

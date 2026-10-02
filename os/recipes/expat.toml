@@ -1,0 +1,20 @@
+[package]
+name = "expat"
+version = "2.7.4"
+summary = "XML parser library"
+license = "MIT"
+homepage = "https://libexpat.github.io/"
+
+[[source]]
+sha256 = "5b356795b889d3e5b379433ece069b8781bf0727f6959ad3bbc9da0c22164f59"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/e/expat/expat_2.7.4.orig.tar.gz"]
+
+[build]
+script = '''
+# The archive is a snapshot of the git repository; the library lives in expat/.
+cd expat
+./buildconf.sh
+./configure --prefix=/usr --disable-static --without-docbook --docdir=/usr/share/doc/expat-2.7.4
+make
+make DESTDIR="$DESTDIR" install
+'''

@@ -1,0 +1,25 @@
+[package]
+name = "make"
+version = "4.4.1"
+summary = "GNU make"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/make/"
+
+[[source]]
+sha256 = "3b16b00ea1079af9f8096bbc71ff7cc00c249fc6a862003da3c42308a0adb0fe"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/m/make-dfsg/make-dfsg_4.4.1.orig.tar.xz"]
+
+[build]
+script = '''
+# The +dfsg tarball has no doc/ directory.
+sed -i 's| doc/Makefile||' configure
+sed -i 's/^SUBDIRS = lib po doc$/SUBDIRS = lib po/; /^man_MANS = /d' Makefile.in
+./configure --prefix=/usr --without-guile
+make
+make DESTDIR="$DESTDIR" install
+'''
+
+[ai]
+kind = "cli"
+launch = "make"
+keywords = ["build", "makefile"]

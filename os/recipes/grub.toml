@@ -1,0 +1,51 @@
+[package]
+name = "grub"
+version = "2.14"
+summary = "GRand Unified Bootloader (BIOS and UEFI)"
+license = "GPL-3.0-or-later"
+homepage = "https://www.gnu.org/software/grub/"
+
+[[source]]
+sha256 = "bc8d3c73535b8838d8c8e2654d73edc4e6ae8c8acdb45d5df5dc9a1547446d43"
+urls = ["https://ftp.gnu.org/gnu/grub/grub-2.14.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/g/grub2/grub2_2.14.orig.tar.xz"]
+file = "grub2_2.14.orig.tar.xz"
+
+[build]
+strip = false
+script = '''
+unset CFLAGS CPPFLAGS CXXFLAGS LDFLAGS
+for platform in pc efi; do
+  mkdir "build-$platform"
+  (
+    cd "build-$platform"
+    # Missing from the release archive; this is its content in GRUB's repository.
+    mkdir -p grub-core
+    echo depends bli part_gpt > grub-core/extra_deps.lst
+    extra=""
+    [ "$platform" = efi ] && extra="--target=x86_64"
+    # With binutils 2.46, --image-base puts the ELF headers at the base address,
+    # so the BIOS kernel's code would start 0x74 bytes too late and grub-mkimage
+    # rejects it. GRUB's fallback, -Ttext, places the code itself at the address.
+    if [ "$platform" = pc ]; then
+      export ax_cv_check_ldflags___Wl___image_base_0x400000=no
+    else
+      unset ax_cv_check_ldflags___Wl___image_base_0x400000
+    fi
+    ../configure --prefix=/usr --sysconfdir=/etc --disable-efiemu --disable-werror \
+      --enable-grub-mkfont=no --with-platform="$platform" $extra
+    make
+    if [ "$platform" = pc ]; then
+      readelf -h grub-core/kernel.exec | grep -q 'Entry point address: *0x9000$'
+    fi
+    make DESTDIR="$DESTDIR" install
+  )
+done
+mkdir -p "$DESTDIR/usr/share/bash-completion/completions"
+if [ -d "$DESTDIR/etc/bash_completion.d" ]; then
+  mv "$DESTDIR"/etc/bash_completion.d/* "$DESTDIR/usr/share/bash-completion/completions/"
+  rmdir "$DESTDIR/etc/bash_completion.d"
+fi
+test -f "$DESTDIR/usr/lib/grub/i386-pc/boot.img"
+test -f "$DESTDIR/usr/lib/grub/x86_64-efi/normal.mod"
+'''

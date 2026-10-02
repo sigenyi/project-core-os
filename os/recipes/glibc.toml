@@ -1,0 +1,99 @@
+[package]
+name = "glibc"
+version = "2.43"
+summary = "GNU C library"
+license = "LGPL-2.1-or-later"
+homepage = "https://www.gnu.org/software/libc/"
+
+[[source]]
+sha256 = "d9c86c6b5dbddb43a3e08270c5844fc5177d19442cf5b8df4be7c07cd5fa3831"
+urls = ["https://ftp.gnu.org/gnu/glibc/glibc-2.43.tar.xz",
+        "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/glibc_2.43.orig.tar.xz"]
+file = "glibc_2.43.orig.tar.xz"
+
+[build]
+files = ["lib/compare-results.py", "glibc/expected-failures.txt"]
+script = '''
+# glibc 2.43 removed lock elision and renamed struct __pthread_mutex_s's
+# __elision field to __unused in the public x86 header, although its own NEWS
+# (2.19) says public headers no longer use __unused: BSD-derived and portable
+# code defines __unused as a macro, and then <pthread.h> no longer compiles
+# (libstdc++'s 17_intro/names tests catch it). Restore the previous name; the
+# layout is unchanged.
+sed -i 's/^  short __unused;$/  short __elision;/' sysdeps/x86/nptl/bits/struct_mutex.h
+grep -q '^  short __elision;$' sysdeps/x86/nptl/bits/struct_mutex.h
+if grep -q '__unused' sysdeps/x86/nptl/bits/struct_mutex.h; then exit 1; fi
+# Linux 7.0's <linux/mount.h> spells OPEN_TREE_CLONE as (1 << 0); glibc 2.43
+# defines it textually differently, which is a redefinition error. Only define
+# the open_tree flags when the kernel header has not.
+sed -i -e 's|^#define OPEN_TREE_CLONE    1 .*|#ifndef OPEN_TREE_CLONE\n# define OPEN_TREE_CLONE 1\n#endif|' \
+       -e 's|^#define OPEN_TREE_CLOEXEC  O_CLOEXEC .*|#ifndef OPEN_TREE_CLOEXEC\n# define OPEN_TREE_CLOEXEC O_CLOEXEC\n#endif|' \
+  sysdeps/unix/sysv/linux/sys/mount.h
+grep -q '^#ifndef OPEN_TREE_CLONE' sysdeps/unix/sysv/linux/sys/mount.h
+sed -e '/test-installation/s@$(PERL)@echo not running@' -i Makefile
+# The tst-ifunc-isa tests are meant to be expected failures only when linking
+# with lld, but glibc tests the flag for being non-empty and with-lld is "no"
+# otherwise, so they would be marked as expected failures with GNU ld too.
+sed -i 's/^\(test-xfail-tst-ifunc-isa-[12]\(-static\)\? = \)\$(with-lld)$/\1$(filter yes,$(with-lld))/' \
+  sysdeps/x86/Makefile
+test "$(grep -c 'filter yes,$(with-lld)' sysdeps/x86/Makefile)" = 4
+mkdir build && cd build
+echo "rootsbindir=/usr/sbin" > configparms
+../configure --prefix=/usr --disable-werror --disable-nscd libc_cv_slibdir=/usr/lib \
+  --enable-stack-protector=strong --enable-kernel=5.10
+make
+mkdir -p "$DESTDIR/etc"
+touch "$DESTDIR/etc/ld.so.conf"
+make DESTDIR="$DESTDIR" install
+sed '/RTLDLIST=/s@/usr@@g' -i "$DESTDIR/usr/bin/ldd"
+# /etc/rpc belongs to netbase, with the other network databases.
+rm -f "$DESTDIR/etc/rpc"
+rm -f "$DESTDIR/etc/ld.so.cache"
+# Locales: C.UTF-8 is the system default; en_US.UTF-8 for programs that expect it.
+mkdir -p "$DESTDIR/usr/lib/locale"
+I18NPATH=../localedata elf/ld.so --library-path . locale/localedef --prefix="$DESTDIR" \
+  -i ../localedata/locales/C -f ../localedata/charmaps/UTF-8 C.UTF-8 || test $? -eq 1
+I18NPATH=../localedata elf/ld.so --library-path . locale/localedef --prefix="$DESTDIR" \
+  -i ../localedata/locales/en_US -f ../localedata/charmaps/UTF-8 en_US.UTF-8 || test $? -eq 1
+test -s "$DESTDIR/usr/lib/locale/locale-archive"
+cat > "$DESTDIR/etc/nsswitch.conf" <<NSS
+passwd: files systemd
+group: files systemd
+shadow: files systemd
+hosts: mymachines resolve [!UNAVAIL=return] files myhostname dns
+networks: files
+protocols: files
+services: files
+ethers: files
+rpc: files
+NSS
+cat > "$DESTDIR/etc/ld.so.conf" <<LD
+/usr/local/lib
+include /etc/ld.so.conf.d/*.conf
+LD
+mkdir -p "$DESTDIR/etc/ld.so.conf.d" "$DESTDIR/usr/share/cpkg/hooks"
+cat > "$DESTDIR/usr/share/cpkg/hooks/ldconfig.toml" <<HOOK
+description = "Updating the shared library cache"
+paths = ["usr/lib/*.so*", "usr/local/lib/*.so*", "etc/ld.so.conf", "etc/ld.so.conf.d/**"]
+exec = ["/usr/bin/ldconfig"]
+order = 10
+HOOK
+'''
+check = '''
+# The test suite runs against the freshly built library in build/, inside the
+# build root. TIMEOUTFACTOR gives timing-sensitive tests room on a loaded machine.
+cd build
+TIMEOUTFACTOR=10 make -k check > "$RESULTS/make-check.log" 2>&1 || true
+cp tests.sum "$RESULTS/"
+find . -name '*.out' -exec grep -l 'Timed out' {} + > "$RESULTS/timeouts.txt" || true
+for t in $(sed -n 's/^\(FAIL\|XPASS\|ERROR\|UNRESOLVED\): //p' tests.sum); do
+  [ -f "$t.out" ] && install -Dm644 "$t.out" "$RESULTS/out/$t.out"
+done
+# 7184 tests passed in the first full run; a much lower count means part of
+# the suite did not run.
+python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
+  --min-pass 7000 tests.sum
+'''
+
+[runtime]
+depends = ["filesystem"]

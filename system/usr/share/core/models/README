@@ -1,0 +1,8 @@
+C.O.R.E. OS model directory
+
+core.gguf    symlink to the language model served by core-inference.service
+whisper.bin  symlink to the whisper.cpp speech model used for voice input
+
+Models are baked into the image by image/scripts/fetch-models.sh (see
+docs/MODELS.md). To switch models, point the symlink at another GGUF file and
+run: systemctl restart core-inference

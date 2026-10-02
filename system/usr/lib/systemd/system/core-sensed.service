@@ -1,0 +1,40 @@
+[Unit]
+Description=C.O.R.E. telemetry (what the AI knows about the machine)
+Documentation=https://github.com/sigenyi/project-core-os/blob/main/docs/ARCHITECTURE.md
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/core-sensed --output /run/core-sense/telemetry.json --interval 5
+Restart=always
+RestartSec=2
+User=core-sense
+Group=core-sense
+RuntimeDirectory=core-sense
+RuntimeDirectoryMode=0755
+
+# Read-only observer: the only privilege is reading the kernel log.
+AmbientCapabilities=CAP_SYSLOG
+CapabilityBoundingSet=CAP_SYSLOG
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+# getifaddrs needs netlink; systemctl needs the D-Bus socket.
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+IPAddressDeny=any
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target
