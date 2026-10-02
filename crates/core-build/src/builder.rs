@@ -125,10 +125,10 @@ impl Builder {
         Ok(true)
     }
 
-    fn write_stamp(&self, r: &Recipe) -> Result<(), String> {
+    fn write_stamp(&self, r: &Recipe, hash: &str) -> Result<(), String> {
         let path = self.stamp_path(r);
         fs::create_dir_all(path.parent().unwrap()).map_err(io(&path))?;
-        fs::write(&path, Self::recipe_hash(r)? + "\n").map_err(io(&path))
+        fs::write(&path, format!("{hash}\n")).map_err(io(&path))
     }
 
     fn base_env(&self) -> Vec<(String, String)> {
@@ -164,6 +164,9 @@ impl Builder {
         if self.up_to_date(r)? {
             return Ok(Outcome::UpToDate);
         }
+        // The stamp records the recipe as it was when the build started, even if
+        // the file is edited while it builds.
+        let hash = Self::recipe_hash(r)?;
         // Until this build succeeds, the recipe is not built (or tested).
         let _ = fs::remove_file(self.stamp_path(r));
         let _ = fs::remove_file(self.checked_path(r));
@@ -224,9 +227,9 @@ impl Builder {
             }
         }
         fs::remove_dir_all(&build_dir).map_err(io(&build_dir))?;
-        self.write_stamp(r)?;
+        self.write_stamp(r, &hash)?;
         if self.wants_check(r) {
-            fs::write(self.checked_path(r), Self::recipe_hash(r)? + "\n").map_err(io(&self.checked_path(r)))?;
+            fs::write(self.checked_path(r), format!("{hash}\n")).map_err(io(&self.checked_path(r)))?;
         }
         Ok(Outcome::Built)
     }
@@ -239,7 +242,9 @@ impl Builder {
         let results_rel = format!("{build_rel}/results");
         let results = root.join(&results_rel);
         fs::create_dir_all(&results).map_err(io(&results))?;
-        let mut env = env.to_vec();
+        // SOURCE_DATE_EPOCH makes tools stamp fixed times (binutils' ar then
+        // cannot tell older members from newer ones); tests see a normal system.
+        let mut env: Vec<(String, String)> = env.iter().filter(|(k, _)| k != "SOURCE_DATE_EPOCH").cloned().collect();
         env.push(("RESULTS".into(), format!("/{results_rel}")));
         let log = self.work.join("logs").join(format!("{name}.check.log"));
         let cwd = format!("/{build_rel}/src");

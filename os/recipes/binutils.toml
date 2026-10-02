@@ -25,7 +25,14 @@ rm -f "$DESTDIR"/usr/lib/lib{bfd,ctf,ctf-nobfd,opcodes,sframe}.a
 check = '''
 cd build
 make -k check > "$RESULTS/make-check.log" 2>&1 || true
-find . \( -name '*.sum' -o -name '*.log' \) -path '*testsuite*' -exec cp --parents {} "$RESULTS/" \;
+# Each suite writes <tool>.sum in its own directory. All five must be there, or a
+# suite did not run.
+sums=$(find . -name '*.sum' | sort)
+for tool in binutils gas ld libctf libsframe; do
+  printf '%s\n' $sums | grep -q "/$tool\.sum$" || { echo "no $tool.sum: that suite did not run" >&2; exit 1; }
+done
+for f in $sums; do cp --parents "$f" "$RESULTS/"; [ -f "${f%.sum}.log" ] && cp --parents "${f%.sum}.log" "$RESULTS/"; done
+# 5900 tests passed across these suites in the first full run.
 python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
-  --min-pass 1 $(find . -name '*.sum' -path '*testsuite*')
+  --min-pass 5800 $sums
 '''
