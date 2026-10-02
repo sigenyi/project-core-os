@@ -97,7 +97,15 @@ id -nG tester | grep -qw users || usermod -a -G users tester
 chown -R tester:tester ..
 su tester -s /usr/bin/bash -c "PATH=$PATH TIMEOUTFACTOR=10 make -k check" > "$RESULTS/make-check.log" 2>&1 || true
 chown -R root:root ..
-cp tests.sum "$RESULTS/"
+# The one test that needs real UID 0 (it checks faccessat with setuid
+# credentials) is unsupported for tester; run it as root as well.
+rm -f io/tst-faccessat-setuid.test-result
+make test t=io/tst-faccessat-setuid > "$RESULTS/root-tests.log" 2>&1 || true
+cat io/tst-faccessat-setuid.test-result > root-tests.sum
+if grep -q '^UNSUPPORTED' root-tests.sum; then
+  echo "io/tst-faccessat-setuid is unsupported even as root" >&2; exit 1
+fi
+cp tests.sum root-tests.sum "$RESULTS/"
 find . -name '*.out' -exec grep -l 'Timed out' {} + > "$RESULTS/timeouts.txt" || true
 for t in $(sed -n 's/^\(FAIL\|XPASS\|ERROR\|UNRESOLVED\): //p' tests.sum); do
   [ -f "$t.out" ] && install -Dm644 "$t.out" "$RESULTS/out/$t.out"
@@ -105,7 +113,7 @@ done
 # 7252 tests passed once the build root became its own mount namespace; a much
 # lower count means part of the suite did not run.
 python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
-  --min-pass 7150 tests.sum
+  --min-pass 7150 tests.sum root-tests.sum
 '''
 
 [runtime]
