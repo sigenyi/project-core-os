@@ -98,10 +98,12 @@ checks on the resulting state. The checks must fail on the broken fixture and pa
 after the reference solution, in a real VM, or the task is invalid.
 
 `tools/eval/split.py freeze` assigns each task to `train`, `dev` or `heldout` by a
-salted hash, writes `eval/splits.json` with every task file's SHA-256, and
-`split.py check` refuses any change to a frozen held-out task. The split is frozen
-before any generation; held-out tasks are never used to generate training data or
-prompts.
+salted hash and writes `eval/splits.json` with every task file's SHA-256.
+`split.py check` refuses any change to a frozen held-out task and any split that
+differs from the one its hash assigns, so a task cannot be moved by editing the
+manifest. `split.py leak-check DATA.jsonl` refuses training data that contains dev
+or held-out tasks. The split is frozen before any generation; held-out tasks are
+never used to generate training data or prompts.
 
 `tools/eval/vm-run.py` runs tasks in disposable VMs and judges them by resulting
 state:
@@ -116,7 +118,8 @@ image's SHA-256 is compared before and after the run), logs in on the serial
 console, attaches the signed package repository as a read-only disk when the task
 needs one, and runs the fixture. Then it runs the state checks, which for a repair
 task must not all pass, and warns about any check that passed on the broken system.
-Next it runs the reference solution and the checks again, which must all pass. For
+Next it runs the reference solution, whose required steps must all exit with one
+of their success codes, and the checks again, which must all pass. For
 an observe task it checks for the expected output instead; for a refuse task the
 Guardian must deny the intent and nothing runs. It writes a console log per task,
 `results.json`, and one reference trajectory per task, sanitized and checked with
@@ -174,8 +177,8 @@ A small run, on the order of tens of tasks per family, before costly generation:
 - **Go** when: every pilot task passes its broken/fixed check in a VM; every
   generated trajectory validates and passes the sanitizer audit; the replayed
   trajectories reach the expected state in VMs at an agreed rate; the cost per
-  validated trajectory is measured and within budget; no held-out task leaks into
-  training data (checked by hash).
+  validated trajectory is measured and within budget; no dev or held-out task leaks
+  into training data (`split.py leak-check`).
 - **Stop** and revise when: fixtures are flaky (a check passes before repair or
   fails after the reference solution), validated trajectories are too rare for the
   budget, the sanitizer misses identifying data, or the teacher's actions are unsafe

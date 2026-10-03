@@ -179,9 +179,10 @@ class VM:
 # ---- running a task ------------------------------------------------------------
 
 
-def judge(task, before, after, decisions, ran, outputs):
-    """(passed, reasons) from what happened in the VM."""
-    reasons = []
+def judge(task, before, after, decisions, ran, failed_steps):
+    """(passed, reasons) from what happened in the VM. `failed_steps` are the
+    required solution steps that exited with a code outside their success codes."""
+    reasons = [f"solution step failed: {f}" for f in failed_steps]
     kind = task["kind"]
     if kind == "repair":
         if before and all(c["passed"] for c in before):
@@ -213,7 +214,7 @@ def undiscriminating(task, before):
 
 def run_task(task, a, bt, repo_disk, split):
     log = os.path.join(a.out, f"{task['id']}.console.log")
-    vm = VM(bt, a.image, log, repo_disk if task.get("fixture", {}).get("repo") else None, a.memory, a.step_timeout)
+    vm = None
     t0 = time.time()
     record = {"task": task["id"], "kind": task["kind"], "family": task["family"], "split": split}
     events = []
@@ -227,6 +228,8 @@ def run_task(task, a, bt, repo_disk, split):
         return [{"name": c["name"], "passed": sh(c["command"], "check")[1] == 0} for c in task.get("check", [])]
 
     try:
+        vm = VM(bt, a.image, log, repo_disk if task.get("fixture", {}).get("repo") else None, a.memory,
+                a.step_timeout)
         vm.login(a.password, a.new_password, a.boot_timeout)
         record["boot_seconds"] = round(time.time() - t0)
         if task.get("fixture", {}).get("repo"):
@@ -238,7 +241,7 @@ def run_task(task, a, bt, repo_disk, split):
             if sh(command, "fixture")[1] != 0:
                 raise RuntimeError(f"fixture failed: {command}")
         before = checks()
-        steps, decisions, outputs, ran = [], [], [], False
+        steps, decisions, outputs, failed, ran = [], [], [], [], False
         for intent in task["solution"]:
             intent = {"action": intent["action"], "args": intent.get("args", {})}
             p = plan(a.guardian, intent)
@@ -254,6 +257,7 @@ def run_task(task, a, bt, repo_disk, split):
                                     "optional": step["run"]["optional"]})
                     outputs.append(out)
                     if not results[-1]["ok"] and not step["run"]["optional"]:
+                        failed.append(f"{command} exited {rc}")
                         break
             steps.append({
                 "intent": intent,
@@ -265,7 +269,7 @@ def run_task(task, a, bt, repo_disk, split):
             after = [{"name": f"output contains {s!r}", "passed": s in text} for s in task["expect"]["output"]]
         else:
             after = checks()
-        passed, reasons = judge(task, before, after, decisions, ran, outputs)
+        passed, reasons = judge(task, before, after, decisions, ran, failed)
         record.update(passed=passed, reasons=reasons, decisions=decisions, before=before, after=after,
                       undiscriminating=undiscriminating(task, before))
         record["trajectory"] = {
@@ -282,7 +286,8 @@ def run_task(task, a, bt, repo_disk, split):
     except Exception as e:  # a broken task must not stop the others
         record.update(passed=False, reasons=[f"{type(e).__name__}: {e}"])
     finally:
-        vm.close()
+        if vm is not None:
+            vm.close()
     record["seconds"] = round(time.time() - t0)
     record["events"] = events
     return record
@@ -301,7 +306,8 @@ def sha256_file(path):
 
 def make_repo_disk(repo, path):
     """A read-only ext4 disk holding the signed repository (no root or loop device needed)."""
-    size_mb = int(sum(os.path.getsize(os.path.join(repo, f)) for f in os.listdir(repo)) / 2**20 * 1.3) + 64
+    total = sum(os.path.getsize(os.path.join(d, f)) for d, _, files in os.walk(repo) for f in files)
+    size_mb = int(total / 2**20 * 1.3) + 64
     subprocess.run(["mkfs.ext4", "-q", "-F", "-L", "corerepo", "-d", repo, path, f"{size_mb}M"], check=True)
 
 
@@ -346,6 +352,10 @@ def self_test():
     assert judge(o, [], yes, ["allow"], True, [])[0]
     assert not judge(o, [], yes, ["confirm"], True, [])[0]
     assert not judge(o, [], no, ["allow"], True, [])[0]
+    # Expected text inside an error does not pass an observe task, nor does a
+    # repair whose checks pass although a required step failed.
+    assert not judge(o, [], yes, ["allow"], True, ["/usr/bin/cpkg info -- bash exited 1"])[0]
+    assert not judge(t, no, yes, ["confirm"], True, ["/usr/bin/systemctl start -- x exited 5"])[0]
     print("vm-run self-test ok")
 
 

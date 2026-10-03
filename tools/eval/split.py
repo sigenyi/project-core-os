@@ -4,7 +4,7 @@
     split.py freeze [--salt S] [--heldout 0.2] [--dev 0.1]   write eval/splits.json (once)
     split.py add                     assign tasks that are new since the freeze
     split.py check                   fail if a held-out task changed, vanished or is unassigned
-    split.py leak-check DATA.jsonl   fail if training data contains held-out tasks
+    split.py leak-check DATA.jsonl   fail if training data contains dev or held-out tasks
     split.py --self-test
 
 A task's split is decided by a salted hash of its id, not by hand, so nobody picks
@@ -53,7 +53,12 @@ def check(manifest, task_list):
     """(errors, notes): errors fail the check."""
     errors, notes = [], []
     current = {t["id"]: t for t in task_list}
+    r = manifest["ratios"]
     for tid, entry in manifest["tasks"].items():
+        # The split comes from the hash, never from an edit to the manifest.
+        expected = assign(tid, manifest["salt"], r["heldout"], r["dev"])
+        if entry["split"] != expected:
+            errors.append(f"task {tid} is recorded as {entry['split']}, its hash assigns {expected}")
         t = current.get(tid)
         if entry["split"] == "heldout":
             if t is None:
@@ -84,14 +89,16 @@ def add(manifest, task_list):
 
 
 def leak_check(manifest, records):
-    """Problems in a training dataset: held-out tasks, or split labels that disagree."""
+    """Problems in a training dataset: tasks that are not train tasks (dev tasks are
+    for choosing between models, held-out tasks for accepting one), or split labels
+    that disagree with the manifest."""
     out = []
     for n, r in enumerate(records, 1):
         entry = manifest["tasks"].get(r.get("task"))
         if entry is None:
             out.append(f"record {n}: task {r.get('task')!r} is not in the split manifest")
-        elif entry["split"] == "heldout":
-            out.append(f"record {n}: held-out task {r['task']} must not be in training data")
+        elif entry["split"] != "train":
+            out.append(f"record {n}: {entry['split']} task {r['task']} must not be in training data")
         elif r.get("split") != entry["split"]:
             out.append(f"record {n}: task {r['task']} is {entry['split']}, record says {r.get('split')}")
     return out
@@ -116,8 +123,13 @@ def self_test():
     assert any("has no split" in e for e in check(m, new)[0])
     m2 = add(json.loads(json.dumps(m)), new)
     assert check(m2, new) == ([], []) and m2["tasks"][held["id"]] == m["tasks"][held["id"]]
-    leaks = leak_check(m, [{"task": held["id"], "split": "train"}, {"task": train["id"], "split": "train"}])
-    assert len(leaks) == 1 and "must not be in training data" in leaks[0], leaks
+    dev = next(t for t in ts if m["tasks"][t["id"]]["split"] == "dev")
+    leaks = leak_check(m, [{"task": held["id"], "split": "train"}, {"task": train["id"], "split": "train"},
+                           {"task": dev["id"], "split": "dev"}])
+    assert len(leaks) == 2 and all("must not be in training data" in x for x in leaks), leaks
+    moved = json.loads(json.dumps(m))
+    moved["tasks"][held["id"]]["split"] = "train"
+    assert any("its hash assigns heldout" in e for e in check(moved, ts)[0]), "hand-moved split is caught"
     print("split self-test ok")
 
 
