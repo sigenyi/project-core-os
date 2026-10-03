@@ -66,8 +66,9 @@ Do not add `cfg` stubs or fake macOS implementations to make it compile there.
 ## Do not, unless the user asks
 
 * Build the base OS (`core-build fetch`, `bootstrap`, `world`, `build`, any
-  `--check` run, `os/tools/mkimage.sh`, `os/tools/boot-test.py`). It needs a Linux
-  host, root, about 25 GB and hours.
+  `--check` run, `os/tools/mkimage.sh`, `os/tools/boot-test.py`,
+  `os/tools/check-tmpfiles-links.sh`). It needs a Linux host, root, about 25 GB
+  and hours.
 * Run `core-build prune`: it deletes every file in the build root that no package
   owns. Use `--dry-run` to see what it would remove.
 * Unmount anything in the build root. When core-build refuses to start because

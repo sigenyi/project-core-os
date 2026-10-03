@@ -110,6 +110,7 @@ sudo os/tools/mkimage.sh --repo /var/tmp/core-build/repo \
      --key /path/outside/the/repo/core.pub --out core.img
 os/tools/boot-test.py core.img            # BIOS
 os/tools/boot-test.py core.img --uefi     # UEFI
+sudo os/tools/check-tmpfiles-links.sh core.img   # packaged links vs systemd-tmpfiles
 ```
 
 `core-build` skips recipes whose stamp matches the recipe (and any files it brings
@@ -267,6 +268,8 @@ from core-build's stamps and the build root's `cpkg` history:
 | Oct 3, 01:06 | glibc, with its test suite | The Oct 1 GCC |
 | Oct 3, 03:12 | GCC, with its test suite | The Oct 1 GCC, against the Oct 3 glibc |
 | Oct 3, 03:12–03:59 | Packages 30–89 in `os/recipes/ORDER` (Python twice; the second time after the pip fix) | The Oct 3 GCC and glibc, the tested ones |
+| Oct 3, 06:15 | cpkg alone, from the merge of PR #3 (`88e9fc6`), with the new `cpkg verify` | Rust on the build host (rustc 1.97.0), packaged in the build root |
+| Oct 3, 06:27 | filesystem alone, with `/etc/mtab` as systemd's link (below) | No compiled code |
 
 So the glibc, GCC and binutils that ship are the binaries that passed their
 suites, and 60 packages were built by the tested toolchain. The 27 packages
@@ -341,11 +344,25 @@ failure, and the command then exits with an error. A package name that is not
 installed gives `{"error": "..."}` instead. (Before this change it printed a bare
 array of findings.)
 
-The image tested on Oct 3 contains the `cpkg` from before that change, which
-exited 0 whatever it found, and the boot check of that time passed whenever
-`cpkg verify` exited 0. Its recorded output lists only the four account files,
-and replaying that output through the current check passes. The next image
-carries the new `cpkg`.
+The first image tested on Oct 3 contained the `cpkg` from before that change,
+which exited 0 whatever it found, and the boot check of that time passed
+whenever `cpkg verify` exited 0. The image built from the merge of that change
+(`88e9fc6`) carried the new `cpkg`, and its boot test failed on one finding the
+old `cpkg` could not see: `filesystem: /etc/mtab modified configuration`. The
+package shipped `/etc/mtab` as a link to `/proc/self/mounts`, and at every boot
+systemd's `tmpfiles.d/etc.conf` replaces it with its own spelling
+(`L+ /etc/mtab - - - - ../proc/self/mounts`), the same file under a different
+link text. The `filesystem` package now ships systemd's link, and the image
+built with it passes the boot test on BIOS and UEFI with only the four account
+files reported.
+
+`os/tools/check-tmpfiles-links.sh IMAGE` (root) guards against that class of
+mismatch. On a disposable copy of the image, it applies the image's own
+systemd-tmpfiles, boot-only lines included, to every symlink a package ships that
+a tmpfiles.d `L` rule also manages, and fails if any of them changes. It also
+fails if `/etc/mtab` does not read the same as `/proc/self/mounts`, if the
+image's `cpkg verify` exits with an error, or if `cpkg verify` reports one of
+those links. It passes on the image with the fix and fails on the one before it.
 
 ## Not in the base yet
 

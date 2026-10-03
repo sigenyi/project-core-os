@@ -27,7 +27,11 @@ ln -s bin "$d/usr/sbin"
 ln -s lib "$d/usr/lib64"
 ln -s /run "$d/var/run"
 ln -s /run/lock "$d/var/lock"
-ln -s /proc/self/mounts "$d/etc/mtab"
+# Exactly the link systemd's tmpfiles.d/etc.conf forces at every boot
+# (L+ /etc/mtab - - - - ../proc/self/mounts): any other spelling is replaced
+# there, and cpkg verify then reports the file as changed.
+# os/tools/check-tmpfiles-links.sh checks this against a built image.
+ln -s ../proc/self/mounts "$d/etc/mtab"
 ln -s ../usr/lib/os-release "$d/etc/os-release"
 ln -s ../usr/share/zoneinfo/UTC "$d/etc/localtime"
 cp -r etc/. "$d/etc/"
