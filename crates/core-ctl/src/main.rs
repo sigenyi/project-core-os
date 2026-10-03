@@ -47,6 +47,11 @@ enum Cmd {
     Prompt,
     /// Validate an intent JSON offline and show its normalised form.
     Validate { intent: String },
+    /// Check or sanitize trajectory files (JSON lines; docs/TRAINING.md).
+    Trajectory {
+        #[command(subcommand)]
+        command: TrajectoryCmd,
+    },
     /// Show the action contract's version and fingerprint (docs/TRAINING.md).
     Contract {
         /// Print the canonical text the fingerprint is computed over.
@@ -107,6 +112,58 @@ fn main() -> ExitCode {
     }
 }
 
+#[derive(Subcommand)]
+enum TrajectoryCmd {
+    /// Report every problem in a trajectory file; fails if there is any.
+    Check {
+        file: PathBuf,
+        /// The contract fingerprint the dataset pins (default: this build's).
+        #[arg(long)]
+        contract: Option<String>,
+    },
+    /// Read trajectories on stdin, write them sanitized to stdout.
+    Sanitize,
+}
+
+fn trajectory(cmd: TrajectoryCmd) -> Result<bool, String> {
+    use core_protocol::trajectory::{Trajectory, sanitize, validate};
+    match cmd {
+        TrajectoryCmd::Check { file, contract } => {
+            let contract = contract.unwrap_or_else(|| core_protocol::contract::fingerprint().to_string());
+            let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+            let (mut records, mut bad) = (0, 0);
+            for (n, line) in text.lines().enumerate().filter(|(_, l)| !l.trim().is_empty()) {
+                records += 1;
+                let problems = match serde_json::from_str::<Trajectory>(line) {
+                    Ok(t) => validate(&t, &contract),
+                    Err(e) => vec![format!("not a trajectory record: {e}")],
+                };
+                if !problems.is_empty() {
+                    bad += 1;
+                    for p in problems {
+                        println!("{}:{}: {p}", file.display(), n + 1);
+                    }
+                }
+            }
+            println!("{records} records, {bad} with problems (contract {contract})");
+            Ok(bad == 0 && records > 0)
+        }
+        TrajectoryCmd::Sanitize => {
+            for line in std::io::stdin().lines() {
+                let line = line.map_err(|e| e.to_string())?;
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let mut t: Trajectory =
+                    serde_json::from_str(&line).map_err(|e| format!("not a trajectory record: {e}"))?;
+                sanitize(&mut t);
+                println!("{}", serde_json::to_string(&t).map_err(|e| e.to_string())?);
+            }
+            Ok(true)
+        }
+    }
+}
+
 fn run(cmd: Cmd, config: &AgentConfig) -> Result<bool, String> {
     match cmd {
         Cmd::Grammar { actions } => {
@@ -128,6 +185,7 @@ fn run(cmd: Cmd, config: &AgentConfig) -> Result<bool, String> {
             );
             println!("{}", agent.system_prompt());
         }
+        Cmd::Trajectory { command } => return trajectory(command),
         Cmd::Contract { canonical } => {
             if canonical {
                 print!("{}", core_protocol::contract::canonical());

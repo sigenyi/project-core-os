@@ -17,6 +17,7 @@ pub mod logging;
 pub mod paths;
 pub mod risk;
 pub mod time;
+pub mod trajectory;
 pub mod validate;
 pub mod wire;
 
