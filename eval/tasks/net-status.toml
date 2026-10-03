@@ -1,0 +1,13 @@
+# Read-only: the answer comes from the plan's output; nothing is broken first.
+id = "net-status"
+family = "network"
+kind = "observe"
+request = "Am I connected to the network?"
+baseline = "rescue"
+
+[[solution]]
+action = "network_status"
+args = {}
+
+[expect]
+output = ["routable", "default via"]

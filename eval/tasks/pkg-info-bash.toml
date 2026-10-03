@@ -1,0 +1,12 @@
+id = "pkg-info-bash"
+family = "packages"
+kind = "observe"
+request = "Which version of bash is installed?"
+baseline = "model"
+
+[[solution]]
+action = "package_info"
+args = { package = "bash" }
+
+[expect]
+output = ["bash", "5."]

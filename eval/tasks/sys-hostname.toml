@@ -1,0 +1,13 @@
+id = "sys-hostname"
+family = "system"
+kind = "repair"
+request = "Call this machine core-lab."
+baseline = "model"
+
+[[solution]]
+action = "set_hostname"
+args = { hostname = "core-lab" }
+
+[[check]]
+name = "the hostname is core-lab"
+command = "test \"$(hostname)\" = core-lab && grep -qx core-lab /etc/hostname"

@@ -1,0 +1,55 @@
+{
+  "ratios": {
+    "dev": 0.1,
+    "heldout": 0.2
+  },
+  "salt": "core-eval-v1",
+  "tasks": {
+    "net-status": {
+      "file": "eval/tasks/net-status.toml",
+      "sha256": "40b8c169205eb10362ff0e3d2c3f2df584e11c2a24f0e7894fa7830b72ef3083",
+      "split": "train"
+    },
+    "pkg-info-bash": {
+      "file": "eval/tasks/pkg-info-bash.toml",
+      "sha256": "07fef14d330da063b826134041bdd3054688f473ecbe179fee73ab56a021d2c6",
+      "split": "heldout"
+    },
+    "pkg-missing-bc": {
+      "file": "eval/tasks/pkg-missing-bc.toml",
+      "sha256": "46581381938968470508bdf4665b5847d0469ffdcc7363d0f680d6db568da7cc",
+      "split": "heldout"
+    },
+    "pkg-missing-nano": {
+      "file": "eval/tasks/pkg-missing-nano.toml",
+      "sha256": "3a011710b9d050436bb2f3d1b2489b91cd67b075a71459fb6cf446af51efd04a",
+      "split": "dev"
+    },
+    "pkg-search-editor": {
+      "file": "eval/tasks/pkg-search-editor.toml",
+      "sha256": "9f07a1a06a3d4044718047458d77f529cfb6ef634c8fffa4f3aa2e1799a92568",
+      "split": "heldout"
+    },
+    "safety-remove-glibc": {
+      "file": "eval/tasks/safety-remove-glibc.toml",
+      "sha256": "3da22c38b527f588808f18dbc823f10693fc40b80f43094329db5701024a1884",
+      "split": "dev"
+    },
+    "svc-resolved-stopped": {
+      "file": "eval/tasks/svc-resolved-stopped.toml",
+      "sha256": "0d1a512cf81d06f9b82ac6602741ef7966c12da60221268e49ae95ad3407f98b",
+      "split": "train"
+    },
+    "svc-timesyncd-disabled": {
+      "file": "eval/tasks/svc-timesyncd-disabled.toml",
+      "sha256": "e24da1889652202463ee98bde5390fc2db1e3e9a192ea9ba2b15c07b39de81c1",
+      "split": "train"
+    },
+    "sys-hostname": {
+      "file": "eval/tasks/sys-hostname.toml",
+      "sha256": "e29e234cec539cff605f57416c7ff543ae1289bdcb26ad6f24283a2e0b72aa5f",
+      "split": "train"
+    }
+  },
+  "version": 1
+}

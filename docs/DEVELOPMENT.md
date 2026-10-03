@@ -18,6 +18,8 @@ os/tools/          source lookup, image assembly, QEMU boot test
 system/            units and configuration for the C.O.R.E. services
 tools/gbnf-check/  validates the grammar with llama.cpp's GBNF engine
 tools/e2e/         end-to-end test against a live llama-server
+tools/eval/        evaluation tasks: validation, frozen splits, disposable-VM runner
+eval/              evaluation task specifications and the frozen split manifest
 docs/              architecture, security, models, roadmap
 ```
 
@@ -37,6 +39,19 @@ cargo run -p core-sense --bin core-sensed -- --once --summary        # what the 
 cargo run -p core-ctl -- catalog                                     # every action
 cargo run -p core-ctl -- grammar                                     # the GBNF grammar
 cargo run -p core-ctl -- validate '{"action":"restart_service","args":{"service":"-x"}}'
+cargo run -p core-ctl -- contract                                    # action contract fingerprint
+cargo run -p core-guardian -- --config system/etc/core/guardian.toml \
+    --plan '{"action":"install_package","args":{"package":"nano"}}'  # policy and plan, nothing runs
+```
+
+Evaluation tasks (docs/TRAINING.md):
+
+```sh
+python3 tools/eval/tasks.py            # list and validate eval/tasks/*.toml
+python3 tools/eval/split.py check      # held-out tasks unchanged since the freeze
+python3 tools/eval/split.py add        # assign new tasks to splits
+cargo build -p core-guardian -p core-ctl
+tools/eval/vm-run.py --image image/core.img --repo REPO_DIR --out /tmp/eval-run [TASK ...]
 ```
 
 With a llama.cpp checkout that has `llama-server` built:

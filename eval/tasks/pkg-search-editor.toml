@@ -1,0 +1,15 @@
+id = "pkg-search-editor"
+family = "packages"
+kind = "observe"
+request = "Is there a text editor I can install?"
+baseline = "model"
+
+[fixture]
+repo = true
+
+[[solution]]
+action = "search_packages"
+args = { query = "editor" }
+
+[expect]
+output = ["nano"]

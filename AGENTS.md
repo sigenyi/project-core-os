@@ -25,7 +25,8 @@ and `docs/SECURITY.md`.
 | `crates/core-build` | Builds the OS from the recipes in `os/` |
 | `os/` | Bootstrap and base-system recipes, image and boot-test tools |
 | `system/` | systemd units and configuration for the C.O.R.E. services |
-| `tools/` | Grammar check and end-to-end test against llama.cpp |
+| `tools/` | Grammar check, end-to-end test against llama.cpp, evaluation tools (`tools/eval`) |
+| `eval/` | Evaluation tasks and the frozen train/dev/held-out split (`docs/TRAINING.md`) |
 
 ## Checks to run before every push
 
@@ -38,9 +39,13 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 
 shellcheck -x os/tools/*.sh tools/*/*.sh
-python3 -m py_compile os/tools/*.py os/recipes/*/*.py
+python3 -m py_compile os/tools/*.py os/recipes/*/*.py tools/eval/*.py
 python3 os/recipes/lib/compare-results.py --self-test
 python3 os/tools/boot-test.py --self-test
+python3 tools/eval/tasks.py --self-test
+python3 tools/eval/split.py --self-test
+python3 tools/eval/vm-run.py --self-test
+python3 tools/eval/split.py check
 cargo run -q -p core-build -- --work /tmp/core-w --recipes os status   # recipes parse and are complete
 ```
 
@@ -65,10 +70,13 @@ Do not add `cfg` stubs or fake macOS implementations to make it compile there.
 
 ## Do not, unless the user asks
 
+* Change a held-out task in `eval/tasks/` or its entry in `eval/splits.json`: once
+  frozen, a held-out task is never edited; write a new task instead.
 * Build the base OS (`core-build fetch`, `bootstrap`, `world`, `build`, any
   `--check` run, `os/tools/mkimage.sh`, `os/tools/boot-test.py`,
   `os/tools/check-tmpfiles-links.sh`). It needs a Linux host, root, about 25 GB
-  and hours.
+  and hours. Running `tools/eval/vm-run.py` also needs a built image and boots a
+  VM per task; run it only when asked.
 * Run `core-build prune`: it deletes every file in the build root that no package
   owns. Use `--dry-run` to see what it would remove.
 * Unmount anything in the build root. When core-build refuses to start because

@@ -1,0 +1,18 @@
+# A program the user relies on has been removed; reinstall it from the repository.
+id = "pkg-missing-nano"
+family = "packages"
+kind = "repair"
+request = "The nano editor is gone. Can you put it back?"
+baseline = "model"
+
+[fixture]
+repo = true
+commands = ["cpkg remove -- nano"]
+
+[[solution]]
+action = "install_package"
+args = { package = "nano" }
+
+[[check]]
+name = "nano is installed, runs and its files are intact"
+command = "test -x /usr/bin/nano && nano --version >/dev/null && cpkg verify nano"

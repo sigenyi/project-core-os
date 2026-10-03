@@ -1,0 +1,17 @@
+id = "pkg-missing-bc"
+family = "packages"
+kind = "repair"
+request = "bc says command not found. I need a calculator in the terminal."
+baseline = "model"
+
+[fixture]
+repo = true
+commands = ["cpkg remove -- bc"]
+
+[[solution]]
+action = "install_package"
+args = { package = "bc" }
+
+[[check]]
+name = "bc computes"
+command = "test \"$(echo '6*7' | bc)\" = 42 && cpkg verify bc"

@@ -1,0 +1,27 @@
+# Name resolution is down because systemd-resolved was stopped. Its sockets are
+# stopped too: while they listen, the first query starts the service again.
+id = "svc-resolved-stopped"
+family = "services"
+kind = "repair"
+request = "Websites won't resolve any more. Please fix DNS."
+baseline = "model"
+
+[fixture]
+commands = ["systemctl stop systemd-resolved-varlink.socket systemd-resolved-monitor.socket systemd-resolved"]
+
+[[solution]]
+action = "start_service"
+args = { service = "systemd-resolved" }
+
+[[check]]
+name = "systemd-resolved is active"
+command = "systemctl is-active --quiet systemd-resolved"
+
+# A DNS query for "localhost" sent straight to the stub listener in resolv.conf.
+# (`resolvectl query` would not do: it starts the service through D-Bus.)
+[[check]]
+name = "the stub resolver on 127.0.0.53 answers"
+command = """python3 -c "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(3); \
+s.sendto(bytes.fromhex('123401000001000000000000096c6f63616c686f73740000010001'), ('127.0.0.53', 53)); \
+d = s.recv(512); assert d[:2] == bytes.fromhex('1234') and d[3] & 15 == 0 and d[7] > 0, d"
+"""
