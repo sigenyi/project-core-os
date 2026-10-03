@@ -39,7 +39,9 @@ See [BASE-OS.md](BASE-OS.md).
 - [x] Move the Guardian's package and network actions from pacman and
       NetworkManager to `cpkg` and systemd-networkd/resolved (Wi-Fi needs a daemon
       that is not in the base yet; see TRAINING.md, D11)
-- [ ] Package the C.O.R.E. services, llama.cpp and whisper.cpp for the base OS
+- [x] Package the C.O.R.E. services for the base OS (`core-os`), with an image that
+      boots and passes the integration gate through the real Guardian
+- [ ] Package llama.cpp and whisper.cpp (and a model, D8)
 - [ ] Rust toolchain as an OS package, so C.O.R.E. builds itself
 - [ ] A public package repository and `cpkg upgrade` against it
 - [ ] Graphics stack for standalone app sessions: Mesa, Wayland, a kiosk

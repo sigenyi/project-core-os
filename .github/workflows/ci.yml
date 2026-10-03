@@ -40,6 +40,7 @@ jobs:
       - run: python3 tools/eval/tasks.py --self-test
       - run: python3 tools/eval/split.py --self-test
       - run: python3 tools/eval/vm-run.py --self-test
+      - run: python3 tools/eval/integration-gate.py --self-test
       - run: python3 tools/eval/split.py check
 
   recipes:

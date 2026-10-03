@@ -300,6 +300,40 @@ system partition holding GRUB as `\EFI\BOOT\BOOTX64.EFI`, and the ext4 root
 partition, typed as the x86-64 root partition so systemd can discover it. The
 kernel mounts it by PARTUUID.
 
+### The C.O.R.E. image
+
+The base image above has no C.O.R.E. services. The `core-os` package
+(`os/recipes/core-os.toml`) adds them:
+- core-guardian, core-shell, core-ctl and core-sensed, built on the host like cpkg;
+- the Guardian's socket (`/run/core/guardian.sock`, 0660 root:core) and service;
+- core-sensed;
+- the `core` group and the `core-sense` user (sysusers);
+- `/var/log/core` (tmpfiles);
+- the default `guardian.toml` and `agent.toml`.
+
+The model and speech services wait for a model package (TRAINING.md, D8).
+
+To build it without touching the base system's work directory, copy the work
+directory, build `core-os` there and sign that repository. Then make the image
+with an interactive user:
+
+```sh
+cargo build --release -p core-guardian -p core-shell -p core-ctl -p core-sense -p core-pkg -p core-build
+W=/var/tmp/core-integ; mkdir -p $W/work
+cp -a /var/tmp/core-build/{root,repo,state,home} $W/work/
+./target/release/core-build --work $W/work build core-os
+./target/release/core-build --work $W/work index --key /path/outside/the/repo/core.key
+sudo os/tools/mkimage.sh --repo $W/work/repo --key core.pub --out core-integ.img --user core
+os/tools/boot-test.py core-integ.img --packages 90          # and --uefi
+tools/eval/integration-gate.py --image core-integ.img --repo $W/work/repo --out gate/
+```
+
+`--user NAME` creates the person who uses C.O.R.E. as a member of `core`, the only
+group the Guardian accepts besides root, with core-shell as login shell. The
+account logs in with a password like any other, and that password must be changed
+at first login. There is no autologin: the tty1 autologin drop-in in `system/` is
+neither packaged nor installed.
+
 ## Verified
 
 The image built from these packages boots under QEMU (8 GB RAM) with both BIOS

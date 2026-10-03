@@ -21,6 +21,45 @@ frozen held-out set, run in disposable VMs and judged by the resulting system st
 Only this gate accepts a model for the product. An off-the-shelf model that passes
 the integration gate is not a substitute.
 
+### The integration gate, as run
+
+`tools/eval/integration-gate.py` runs the integration gate on an image built with
+the `core-os` package and an interactive user (BASE-OS.md, "The C.O.R.E. image").
+In one disposable VM it checks the real path, with no root replay:
+- **Normal login.** The user logs in on the serial console with a password, makes
+  the forced first-login password change, and gets core-shell. A request there
+  needs a real `Allow? [y/N]` answer.
+- **The agent path.** Requests run as the user through core-shell, with the rescue
+  planner and scripted intents (D9). Each is judged by the resulting state and its
+  audit entries:
+  - a high-risk install, confirmed;
+  - a medium-risk change, declined, and one where input ends at the prompt;
+  - a low-risk start, which is not asked about;
+  - a denied glibc removal;
+  - a failing action;
+  - an agent-side refusal to read `/etc/shadow`;
+  - an invalid intent that never reaches the Guardian.
+- **The protocol.** It is used directly, to try confirmation tokens from another
+  connection and to replay, forge, decline and outlast them. It also sends invalid
+  and out-of-catalog intents, agent-only actions and an oversized frame.
+- **Peers.** A user outside `core` is refused by the socket's file mode. Once an
+  ACL lets it open the socket, the Guardian's own `SO_PEERCRED` check refuses it.
+  The user can neither read the audit log nor change the policy file.
+- **Recovery.** The checks cover:
+  - the Guardian restarted, killed or stopped and started again by its socket;
+  - the socket unit restarted;
+  - a confirmation pending across a restart, which no longer runs anything;
+  - a group-writable policy file, which the Guardian refuses until it is fixed.
+- **Limits and audit.** The rate limit is tested. Every audit entry must carry the
+  contract fingerprint, and every kind of decision must appear.
+- **Availability.** Every Guardian action is checked against the image, and the
+  read-only ones are run. Actions whose programs or devices are missing are
+  reported as such, not counted as working.
+
+Passing it says the plumbing and the protections work on C.O.R.E. OS without a
+model. **It is not the product acceptance gate**, and it says nothing about a
+trained model.
+
 ## Phases
 
 1. **Foundation** (this branch). Guardian backends for C.O.R.E. OS, a versioned

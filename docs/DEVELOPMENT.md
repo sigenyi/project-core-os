@@ -55,6 +55,14 @@ cargo build -p core-guardian -p core-ctl
 tools/eval/vm-run.py --image image/core.img --repo REPO_DIR --out /tmp/eval-run [TASK ...]
 ```
 
+The integration gate runs the real Guardian, as a non-root user, on an image
+with the core-os package. BASE-OS.md, "The C.O.R.E. image", says how to build that
+image:
+
+```sh
+tools/eval/integration-gate.py --image core-integ.img --repo REPO_DIR --out /tmp/gate
+```
+
 With a llama.cpp checkout that has `llama-server` built:
 
 ```sh

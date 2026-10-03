@@ -45,6 +45,7 @@ python3 os/tools/boot-test.py --self-test
 python3 tools/eval/tasks.py --self-test
 python3 tools/eval/split.py --self-test
 python3 tools/eval/vm-run.py --self-test
+python3 tools/eval/integration-gate.py --self-test
 python3 tools/eval/split.py check
 cargo run -q -p core-build -- --work /tmp/core-w --recipes os status   # recipes parse and are complete
 ```
@@ -75,8 +76,10 @@ Do not add `cfg` stubs or fake macOS implementations to make it compile there.
 * Build the base OS (`core-build fetch`, `bootstrap`, `world`, `build`, any
   `--check` run, `os/tools/mkimage.sh`, `os/tools/boot-test.py`,
   `os/tools/check-tmpfiles-links.sh`). It needs a Linux host, root, about 25 GB
-  and hours. Running `tools/eval/vm-run.py` also needs a built image and boots a
-  VM per task; run it only when asked.
+  and hours. Running `tools/eval/vm-run.py` or `tools/eval/integration-gate.py`
+  also needs a built image and boots VMs; run them only when asked.
+* Enable autologin or otherwise weaken how users log in to an image: accounts log
+  in with a password (`mkimage.sh --user`).
 * Run `core-build prune`: it deletes every file in the build root that no package
   owns. Use `--dry-run` to see what it would remove.
 * Unmount anything in the build root. When core-build refuses to start because
