@@ -168,6 +168,14 @@ impl Default for PackagePolicy {
             "filesystem",
             "cpkg",
             "grub",
+            // Essential on C.O.R.E. OS though nothing depends on them: networking
+            // (the Guardian's own `ip`), logins, module loading, process tools and
+            // checking the root file system.
+            "iproute2",
+            "shadow",
+            "kmod",
+            "procps-ng",
+            "e2fsprogs",
             "core-os",
             "llama.cpp",
             "sudo",
@@ -377,6 +385,11 @@ mod tests {
         assert_eq!(c.system.package_manager, PackageManager::Cpkg);
         assert_eq!(c.system.network, NetworkBackend::Networkd);
         assert!(c.services.protected.iter().any(|s| s == "core-guardian"));
+        // Packages essential on C.O.R.E. OS are protected by default and in the shipped config.
+        for p in ["glibc", "cpkg", "grub", "iproute2", "shadow", "kmod", "procps-ng", "e2fsprogs"] {
+            assert!(c.packages.protected.iter().any(|s| s == p), "{p} protected in the shipped config");
+            assert!(PackagePolicy::default().protected.iter().any(|s| s == p), "{p} protected by default");
+        }
     }
 
     #[test]

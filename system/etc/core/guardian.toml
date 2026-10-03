@@ -67,7 +67,8 @@ protected = [
 protected = [
     "base", "linux", "linux-lts", "linux-zen", "linux-hardened", "linux-firmware",
     "systemd", "systemd-libs", "glibc", "pacman", "bash", "coreutils", "util-linux",
-    "filesystem", "cpkg", "grub", "core-os", "llama.cpp", "sudo",
+    "filesystem", "cpkg", "grub", "iproute2", "shadow", "kmod", "procps-ng", "e2fsprogs",
+    "core-os", "llama.cpp", "sudo",
 ]
 
 # [tools]

@@ -284,6 +284,11 @@ impl<'a> Planner<'a> {
 
             InstallPackage { package } => Plan::run(
                 match self.config.system.package_manager {
+                    // cpkg installs an operand ending in .cpk as a local file, outside
+                    // repository resolution and signature checks.
+                    PackageManager::Cpkg if package.as_str().ends_with(".cpk") => {
+                        return Err(format!("{package} is a package file name, not a package from the repository"));
+                    }
                     PackageManager::Cpkg => CommandSpec::new("cpkg", ["install", "--"]),
                     PackageManager::Pacman => CommandSpec::new("pacman", ["-S", "--noconfirm", "--needed", "--"]),
                     PackageManager::Apt => {
@@ -468,6 +473,15 @@ mod tests {
         assert_eq!(plan("update_system", json!({})), ["cpkg upgrade"]);
         assert_eq!(plan("package_info", json!({"package": "nano"})), ["cpkg info -- nano"]);
         assert_eq!(plan("search_packages", json!({"query": "text editor"})), ["cpkg search -- text editor"]);
+        // cpkg would install a local file for this name; only repository packages may be installed.
+        let err = plan_with(
+            &GuardianConfig::default(),
+            &FakeProbe { wifi: vec![], fs: "ext4" },
+            "install_package",
+            json!({"package": "evil.cpk"}),
+        )
+        .unwrap_err();
+        assert!(err.contains("not a package from the repository"), "{err}");
         // A name that looks like an option stays an operand.
         let probe = FakeProbe { wifi: vec![], fs: "ext4" };
         let v = ValidatedAction::from_intent(&Intent::new("install_package", json!({"package": "nano"}))).unwrap();
