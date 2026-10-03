@@ -333,8 +333,7 @@ tools/eval/integration-gate.py --image core-integ.img --repo $W/work/repo --out 
 `--user NAME` creates the person who uses C.O.R.E. as a member of `core`, the only
 group the Guardian accepts besides root, with core-shell as login shell. The
 account logs in with a password like any other, and that password must be changed
-at first login. There is no autologin: the tty1 autologin drop-in in `system/` is
-neither packaged nor installed.
+at first login. No autologin is configured.
 
 ## Verified
 

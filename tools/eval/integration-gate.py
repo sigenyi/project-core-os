@@ -394,9 +394,11 @@ def run_gate(a, gate):
     g.sh("systemctl restart core-guardian.service; touch /tmp/gate-go")
     g.sh("for i in $(seq 1 100); do grep -q 'new connection' /tmp/gate-hold.out 2>/dev/null && break; sleep 0.2; done")
     rows = [json.loads(line) for line in g.value("cat /tmp/gate-hold.out").splitlines() if line.startswith("{")]
-    old = response_of(rows, "approve on the old connection").get("type")
+    old = response_of(rows, "approve on the old connection")
+    # Cut means closed or reset by the peer; a timeout would mean a hung Guardian.
+    cut = old.get("type") == "closed" or old.get("error") in ("ConnectionResetError", "BrokenPipeError")
     g.check("recovery", "a restart cuts the connection holding a pending confirmation, and nothing runs",
-            old in ("closed", "connection error")
+            cut
             and response_of(rows, "approve on a new connection").get("kind") == "expired"
             and g.timezone() == "Europe/Paris", rows=rows, timezone=g.timezone())
     g.sh(f"chmod 664 {GUARDIAN_CONFIG}; systemctl restart core-guardian.service; sleep 1")
