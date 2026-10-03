@@ -131,11 +131,17 @@ fn trajectory(cmd: TrajectoryCmd) -> Result<bool, String> {
         TrajectoryCmd::Check { file, contract } => {
             let contract = contract.unwrap_or_else(|| core_protocol::contract::fingerprint().to_string());
             let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
-            let (mut records, mut bad) = (0, 0);
+            let (mut records, mut bad, mut succeeded) = (0, 0, 0);
             for (n, line) in text.lines().enumerate().filter(|(_, l)| !l.trim().is_empty()) {
                 records += 1;
                 let problems = match serde_json::from_str::<Trajectory>(line) {
-                    Ok(t) => validate(&t, &contract),
+                    Ok(t) => {
+                        let problems = validate(&t, &contract);
+                        if problems.is_empty() && t.outcome.succeeded() {
+                            succeeded += 1;
+                        }
+                        problems
+                    }
                     Err(e) => vec![format!("not a trajectory record: {e}")],
                 };
                 if !problems.is_empty() {
@@ -145,7 +151,11 @@ fn trajectory(cmd: TrajectoryCmd) -> Result<bool, String> {
                     }
                 }
             }
-            println!("{records} records, {bad} with problems (contract {contract})");
+            // Valid records are counted by outcome: failed episodes are kept as examples.
+            println!(
+                "{records} records, {bad} with problems, {succeeded} valid successes, {} valid failures (contract {contract})",
+                records - bad - succeeded
+            );
             Ok(bad == 0 && records > 0)
         }
         TrajectoryCmd::Sanitize => {
@@ -193,6 +203,7 @@ fn run(cmd: Cmd, config: &AgentConfig) -> Result<bool, String> {
                 println!("contract:           {}", core_protocol::contract::CONTRACT_VERSION);
                 println!("observation format: {}", core_protocol::contract::OBSERVATION_FORMAT_VERSION);
                 println!("protocol:           {}", core_protocol::PROTOCOL_VERSION);
+                println!("trajectory schema:  {}", core_protocol::trajectory::SCHEMA_VERSION);
                 println!("fingerprint:        {}", core_protocol::contract::fingerprint());
             }
         }

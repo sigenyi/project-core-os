@@ -19,8 +19,9 @@ use crate::action::ValidatedAction;
 use crate::catalog;
 use crate::intent::Intent;
 
-/// Version of this record format.
-pub const SCHEMA_VERSION: u32 = 1;
+/// Version of this record format. Version 2 added the outcome's verdict, reasons and
+/// failed steps; version 1 records are rejected.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// What secret arguments are replaced with (also what the Guardian's audit log uses).
 pub const REDACTED: &str = "<redacted>";
@@ -91,11 +92,69 @@ pub struct Outcome {
     /// The episode ran in a real (disposable) VM, so the checks saw a real system.
     /// Plans that were only previewed or dry-run prove nothing about the result.
     pub ran_in_vm: bool,
+    /// Required commands that failed while carrying out a step. Checks that pass
+    /// afterwards do not make such an episode a success: it is a failed example.
+    pub step_failures: Vec<StepFailure>,
+    /// The verdict of whoever ran the episode (the evaluation runner), which also
+    /// judges things the checks cannot see: the policy decision, a fixture that broke
+    /// nothing, a refusal that ran anyway.
+    pub verdict: Verdict,
+    /// Why the verdict is `failed` (empty when it passed).
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StepFailure {
+    /// The step (1-based) whose command failed.
+    pub step: usize,
+    /// The command and how it failed.
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Verdict {
+    Passed,
+    Failed,
 }
 
 impl Outcome {
+    /// A success only when everything agrees: a passed verdict, no failed step, in
+    /// a real VM, with state checks that all passed.
     pub fn succeeded(&self) -> bool {
-        self.ran_in_vm && !self.checks.is_empty() && self.checks.iter().all(|c| c.passed)
+        self.verdict == Verdict::Passed
+            && self.step_failures.is_empty()
+            && self.ran_in_vm
+            && !self.checks.is_empty()
+            && self.checks.iter().all(|c| c.passed)
+    }
+
+    /// Ways the outcome contradicts itself.
+    fn contradictions(&self, steps: usize) -> Vec<String> {
+        let mut out = Vec::new();
+        if self.verdict == Verdict::Passed {
+            if !self.step_failures.is_empty() {
+                out.push("verdict passed, but a required step failed".into());
+            }
+            if self.checks.iter().any(|c| !c.passed) {
+                out.push("verdict passed, but a state check failed".into());
+            }
+            if !self.ran_in_vm {
+                out.push("verdict passed, but the episode did not run in a VM".into());
+            }
+            if !self.reasons.is_empty() {
+                out.push("verdict passed, but it gives failure reasons".into());
+            }
+        } else if self.reasons.is_empty() {
+            out.push("verdict failed without a reason".into());
+        }
+        for f in &self.step_failures {
+            if f.step == 0 || f.step > steps {
+                out.push(format!("step failure names step {}, the episode has {steps}", f.step));
+            }
+        }
+        out
     }
 }
 
@@ -160,6 +219,12 @@ pub fn sanitize(t: &mut Trajectory) {
     };
     let clean = |text: &str| scrub_identifiers(&unsecret(text));
     t.request = clean(&t.request);
+    for r in &mut t.outcome.reasons {
+        *r = clean(r);
+    }
+    for f in &mut t.outcome.step_failures {
+        f.detail = clean(&f.detail);
+    }
     for step in &mut t.steps {
         step.observation = clean(&step.observation);
         if let Some(thought) = &step.intent.thought {
@@ -260,6 +325,7 @@ pub fn validate(t: &Trajectory, contract: &str) -> Vec<String> {
     if t.outcome.checks.is_empty() {
         problems.push("no state checks".into());
     }
+    problems.extend(t.outcome.contradictions(t.steps.len()));
     problems
 }
 
@@ -318,7 +384,11 @@ fn scrub_segment(seg: &str, style: Style) -> String {
         Some(i) => seg.split_at(i),
         None => (seg, ""),
     };
-    let trimmed = core.trim_end_matches(['.', ':']);
+    // Sentence punctuation after an address is not part of it. A trailing colon is
+    // trimmed only when the text is not an address already: in 2001:4860:: the
+    // colons are the address (zero compression), in "10.0.0.1:" they are not.
+    let dots_trimmed = core.trim_end_matches('.');
+    let trimmed = if is_ipv6(dots_trimmed) { dots_trimmed } else { dots_trimmed.trim_end_matches([':', '.']) };
     let trailing = &core[trimmed.len()..];
     let (mac, v4, v6) = match style {
         Style::Placeholders => ("<mac>", "<ip>", "<ip>"),
@@ -398,10 +468,19 @@ fn is_ipv6(s: &str) -> bool {
     if colons < 2 || !s.bytes().all(|b| b.is_ascii_hexdigit() || b == b':') {
         return false;
     }
-    if s.contains(":::") || s.split(':').any(|g| g.len() > 4) {
+    if s.contains(":::") || s.matches("::").count() > 1 || s.split(':').any(|g| g.len() > 4) {
         return false;
     }
-    s.contains("::") || colons == 7
+    // A colon at either end is only valid as part of "::" (2001:4860::, ::1).
+    if (s.ends_with(':') && !s.ends_with("::")) || (s.starts_with(':') && !s.starts_with("::")) {
+        return false;
+    }
+    if s.contains("::") {
+        // The compressed zeros stand for at least one group.
+        s.split(':').filter(|g| !g.is_empty()).count() <= 7
+    } else {
+        colons == 7
+    }
 }
 
 #[cfg(test)]
@@ -431,7 +510,13 @@ mod tests {
                     observation: String::new(),
                 },
             ],
-            outcome: Outcome { checks: vec![Check { name: "nano runs".into(), passed: true }], ran_in_vm: true },
+            outcome: Outcome {
+                checks: vec![Check { name: "nano runs".into(), passed: true }],
+                ran_in_vm: true,
+                step_failures: vec![],
+                verdict: Verdict::Passed,
+                reasons: vec![],
+            },
         }
     }
 
@@ -499,6 +584,43 @@ mod tests {
         // Known and accepted: a four-part version looks like an address.
         assert_eq!(scrub_identifiers("linux 6.10.5.1"), "linux <ip>");
         assert_eq!(scrub_identifiers("bc 1.07.1, bash 5.3"), "bc 1.07.1, bash 5.3");
+    }
+
+    #[test]
+    fn ipv6_with_trailing_zero_compression_is_scrubbed() {
+        let text = "dns 2001:4860::, gw 2001:4860::. via (2001:4860::) net 2001:4860::/32 ll fe80:: \
+                    lo ::1 any :: doc 2001:db8:: 2001:db8::1 label 2001:4860::8888: time 12:34:56 ok";
+        let s = scrub_identifiers(text);
+        assert_eq!(
+            s,
+            "dns <ip>, gw <ip>. via (<ip>) net <ip>/32 ll <ip> \
+             lo ::1 any :: doc 2001:db8:: 2001:db8::1 label <ip>: time 12:34:56 ok"
+        );
+        assert_eq!(scrub_identifiers(&s), s, "idempotent");
+        // Not addresses: a single dangling colon, two compressions, a MAC, a time.
+        for not_ip in ["2001:4860:", "1::2::3", "a:b", "12:34:56", "Note::"] {
+            assert!(!is_ipv6(not_ip), "{not_ip}");
+        }
+        for ip in ["2001:4860::", "::", "::1", "fe80::", "2001:db8:0:0:0:0:0:1", "::ffff:10.1.2.3"] {
+            assert!(is_ipv6(ip), "{ip}");
+        }
+        // A typed argument becomes a documentation address that still validates.
+        let mut t = record();
+        t.steps[0].intent = Intent::new("ping_host", json!({"host": "2001:4860::"}));
+        assert!(ValidatedAction::from_intent(&t.steps[0].intent).is_ok(), "valid before");
+        sanitize(&mut t);
+        assert_eq!(t.steps[0].intent.args["host"], DOC_IPV6);
+        assert_eq!(validate(&t, crate::contract::fingerprint()), Vec::<String>::new());
+        let once = t.clone();
+        sanitize(&mut t);
+        assert_eq!(t, once, "sanitize is idempotent");
+        // The documentation and loopback exemptions hold for typed arguments too.
+        for kept in ["2001:db8::", "::1", "127.0.0.1", "192.0.2.7"] {
+            let mut t = record();
+            t.steps[0].intent = Intent::new("ping_host", json!({"host": kept}));
+            sanitize(&mut t);
+            assert_eq!(t.steps[0].intent.args["host"], kept);
+        }
     }
 
     #[test]
@@ -608,5 +730,65 @@ mod tests {
         let mut t = record();
         t.outcome.checks[0].passed = false;
         assert!(!t.outcome.succeeded());
+    }
+
+    /// The case the first version got wrong: a required command failed, yet the
+    /// state checks passed afterwards. That is a failed example, kept as one.
+    #[test]
+    fn a_failed_required_step_is_a_failed_episode_even_when_checks_pass() {
+        let mut t = record();
+        t.outcome.step_failures =
+            vec![StepFailure { step: 1, detail: "/usr/bin/cpkg install -- nano exited 1".into() }];
+        t.outcome.verdict = Verdict::Failed;
+        t.outcome.reasons = vec!["solution step failed: /usr/bin/cpkg install -- nano exited 1".into()];
+        assert!(t.outcome.checks.iter().all(|c| c.passed));
+        assert!(!t.outcome.succeeded());
+        assert_eq!(validate(&t, crate::contract::fingerprint()), Vec::<String>::new(), "a valid failed example");
+        let line = serde_json::to_string(&t).unwrap();
+        assert_eq!(serde_json::from_str::<Trajectory>(&line).unwrap(), t, "round-trips");
+
+        // Claiming success over a failed step, or failing without saying why, is rejected.
+        let mut lie = t.clone();
+        lie.outcome.verdict = Verdict::Passed;
+        lie.outcome.reasons.clear();
+        assert!(!lie.outcome.succeeded());
+        let problems = validate(&lie, crate::contract::fingerprint());
+        assert!(problems.iter().any(|p| p.contains("a required step failed")), "{problems:?}");
+        let mut silent = t.clone();
+        silent.outcome.reasons.clear();
+        let problems = validate(&silent, crate::contract::fingerprint());
+        assert!(problems.iter().any(|p| p.contains("without a reason")), "{problems:?}");
+    }
+
+    #[test]
+    fn outcome_contradictions_are_reported() {
+        let mut t = record();
+        t.outcome.checks[0].passed = false;
+        assert!(validate(&t, crate::contract::fingerprint()).iter().any(|p| p.contains("a state check failed")));
+        let mut t = record();
+        t.outcome.ran_in_vm = false;
+        assert!(validate(&t, crate::contract::fingerprint()).iter().any(|p| p.contains("did not run in a VM")));
+        let mut t = record();
+        t.outcome.verdict = Verdict::Failed;
+        t.outcome.reasons = vec!["x".into()];
+        t.outcome.step_failures = vec![StepFailure { step: 9, detail: "x".into() }];
+        assert!(validate(&t, crate::contract::fingerprint()).iter().any(|p| p.contains("names step 9")));
+        // A verdict the runner did not give fails the check too, and so does a
+        // record from schema 1, which had no verdict at all.
+        let v1 = r#"{"schema":1,"contract":"x","episode":"e","task":"t","split":"train","source":"reference",
+            "request":"r","steps":[],"outcome":{"checks":[],"ran_in_vm":true}}"#;
+        assert!(serde_json::from_str::<Trajectory>(v1).is_err());
+    }
+
+    #[test]
+    fn reasons_and_failure_details_are_sanitized() {
+        let mut t = record();
+        t.outcome.verdict = Verdict::Failed;
+        t.outcome.reasons = vec!["ping 192.168.1.9 failed".into()];
+        t.outcome.step_failures = vec![StepFailure { step: 1, detail: "/home/joel/x exited 1".into() }];
+        assert!(validate(&t, crate::contract::fingerprint()).iter().any(|p| p.contains("not sanitized")));
+        sanitize(&mut t);
+        assert_eq!(t.outcome.reasons, ["ping <ip> failed"]);
+        assert_eq!(t.outcome.step_failures[0].detail, "/home/<user>/x exited 1");
     }
 }

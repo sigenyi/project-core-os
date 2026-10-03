@@ -60,8 +60,9 @@ fingerprint (`core-ctl contract`) of the catalog, including the summaries, param
 docs and examples shown in the prompt, and of the grammar as the agent generates it.
 What the hash cannot see is versioned by hand: the agent's prompt and observation
 text (`OBSERVATION_FORMAT_VERSION`) and validation rules that change no parameter
-kind (`CONTRACT_VERSION`). Every Guardian audit entry and every trajectory record
-carries the fingerprint.
+kind (`CONTRACT_VERSION`). The trajectory schema version is part of the canonical
+text too, so a dataset pinned to a fingerprint has one record format. Every Guardian
+audit entry and every trajectory record carries the fingerprint.
 
 The contract is **pinned per dataset, not frozen forever**: a dataset manifest names
 the fingerprint its records were made with, and a validator rejects records made
@@ -88,6 +89,16 @@ checks. The format is defined in `core_protocol::trajectory` and checked by
   validate. A four-part version number reads as an IPv4 address and is scrubbed
   too;
 - every record names its contract fingerprint, fixture, split and outcome.
+
+The outcome (schema 2) records the state checks, whether the episode ran in a VM,
+every required command that failed (`step_failures`, by step) and the runner's
+`verdict` (`passed` or `failed`) with its `reasons`. An episode succeeded only when
+all of these agree: a passed verdict, no failed step, a real VM and passing checks.
+A required command that failed is a failure even if the checks pass afterwards.
+Failed episodes are kept as valid records, because they are useful examples, but
+nothing counts them as successes. `trajectory check` rejects contradictory outcomes
+(a passed verdict with a failed step or check, or a failed one without reasons) and
+schema 1 records, and reports how many valid records succeeded and how many failed.
 
 Dry runs and replays in a planner prove only that a plan was made. A repair is
 validated only by running it in a disposable VM and checking the resulting state.
@@ -124,8 +135,9 @@ Next it runs the reference solution, whose required steps must all exit with one
 of their success codes, and the checks again, which must all pass. For
 an observe task it checks for the expected output instead; for a refuse task the
 Guardian must deny the intent and nothing runs. It writes a console log per task,
-`results.json`, and one reference trajectory per task, sanitized and checked with
-`core-ctl trajectory`.
+`results.json`, and one reference trajectory for every task that ran, whatever its
+verdict, sanitized and checked with `core-ctl trajectory`. A task whose VM, login or
+fixture failed produced no episode and has no trajectory; `results.json` lists it.
 
 Until the Guardian is packaged on the image (phase 2), the reference solution is
 executed as the exact command lines the Guardian plans for it on the host

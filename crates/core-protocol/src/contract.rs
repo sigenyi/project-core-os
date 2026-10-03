@@ -15,6 +15,9 @@
 //! rules that change no parameter kind) is covered by bumping
 //! [`OBSERVATION_FORMAT_VERSION`] or [`CONTRACT_VERSION`].
 //!
+//! The trajectory record format's version is part of the canonical text, so records
+//! of a dataset pinned to one fingerprint share one schema too.
+//!
 //! The contract is pinned per dataset, not frozen forever: a dataset records the
 //! fingerprint its trajectories were made with, and records made with another one
 //! are rejected (`docs/TRAINING.md`). Changing the catalog starts a new dataset
@@ -45,6 +48,7 @@ pub fn canonical() -> String {
     let _ = writeln!(out, "contract {CONTRACT_VERSION}");
     let _ = writeln!(out, "protocol {}", crate::PROTOCOL_VERSION);
     let _ = writeln!(out, "observation-format {OBSERVATION_FORMAT_VERSION}");
+    let _ = writeln!(out, "trajectory-schema {}", crate::trajectory::SCHEMA_VERSION);
     for spec in CATALOG {
         let _ = writeln!(
             out,
@@ -120,6 +124,10 @@ mod tests {
     fn any_change_changes_the_fingerprint() {
         let base = Sha256::digest(canonical().as_bytes());
         let changed = canonical().replacen("risk=high", "risk=medium", 1);
+        assert_ne!(base, Sha256::digest(changed.as_bytes()));
+        let schema = format!("trajectory-schema {}\n", crate::trajectory::SCHEMA_VERSION);
+        assert!(canonical().contains(&schema), "the trajectory schema is pinned with the contract");
+        let changed = canonical().replacen(&schema, "trajectory-schema 999\n", 1);
         assert_ne!(base, Sha256::digest(changed.as_bytes()));
     }
 }
