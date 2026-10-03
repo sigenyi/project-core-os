@@ -23,6 +23,10 @@ mkdir build && cd build
   --enable-default-pie --enable-default-ssp --enable-host-pie --disable-multilib \
   --disable-bootstrap --disable-fixincludes --with-system-zlib
 make
+# Graphite needs isl; without it -floop-* options are "sorry, unimplemented".
+grep -q '^#define HAVE_isl 1' gcc/auto-host.h
+echo 'void f(int *a) { for (int i = 0; i < 64; i++) for (int j = 0; j < 64; j++) a[i] += j; }' |
+  ./gcc/xgcc -B./gcc -O2 -floop-nest-optimize -xc - -c -o /dev/null
 make DESTDIR="$DESTDIR" install
 ln -sr "$DESTDIR/usr/bin/cpp" "$DESTDIR/usr/lib"
 ln -sf gcc.1 "$DESTDIR/usr/share/man/man1/cc.1"
@@ -42,17 +46,67 @@ cd build
 ulimit -s -H unlimited 2>/dev/null || true
 ulimit -s 32768 2>/dev/null || true
 ulimit -a > "$RESULTS/ulimit.txt"
+# libstdc++'s locale tests need these named locales. Compile them into a scratch
+# LOCPATH (which replaces the locale archive, so C.UTF-8 and en_US.UTF-8 go there
+# too), under both the spelling the tests use and glibc's normalized one.
+L=/build/gcc/locales
+mkdir -p "$L"
+while read -r name input charmap; do
+  localedef -i "$input" -f "$charmap" "$L/$name"
+  norm=$(printf '%s' "$name" | sed -E 's/\.(.*)$//')
+  cs=$(printf '%s' "$name" | sed -nE 's/^[^.]*\.//p' | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9')
+  [ -n "$cs" ] && [ ! -e "$L/$norm.$cs" ] && ln -s "$name" "$L/$norm.$cs"
+done <<'LOCALES'
+C.UTF-8 C UTF-8
+en_US.UTF-8 en_US UTF-8
+de_DE de_DE ISO-8859-1
+de_DE.ISO8859-1 de_DE ISO-8859-1
+de_DE.ISO8859-15 de_DE ISO-8859-15
+de_DE.UTF-8 de_DE UTF-8
+en_US.ISO8859-1 en_US ISO-8859-1
+en_US.ISO-8859-15 en_US ISO-8859-15
+en_GB.ISO8859-1 en_GB ISO-8859-1
+en_HK.ISO8859-1 en_HK ISO-8859-1
+en_PH.ISO8859-1 en_PH ISO-8859-1
+es_ES.ISO8859-1 es_ES ISO-8859-1
+es_ES.ISO8859-15 es_ES ISO-8859-15
+es_MX.ISO8859-1 es_MX ISO-8859-1
+fr_FR.ISO8859-1 fr_FR ISO-8859-1
+fr_FR.ISO8859-15 fr_FR ISO-8859-15
+is_IS.ISO8859-1 is_IS ISO-8859-1
+is_IS.UTF-8 is_IS UTF-8
+it_IT.ISO8859-15 it_IT ISO-8859-15
+ja_JP.eucJP ja_JP EUC-JP
+pt_PT.ISO8859-15 pt_PT ISO-8859-15
+ru_RU.ISO8859-5 ru_RU ISO-8859-5
+ru_RU.UTF-8 ru_RU UTF-8
+se_NO.UTF-8 se_NO UTF-8
+ta_IN.UTF-8 ta_IN UTF-8
+zh_TW.UTF-8 zh_TW UTF-8
+aa_DJ.UTF-8 aa_DJ UTF-8
+LOCALES
 # GCC's suite must not run as root (permission tests, and root can write
 # anywhere). Use an unprivileged account in the build root.
 id tester >/dev/null 2>&1 || useradd -m -U tester
+# Some tests need the account to have a supplementary group (glibc's
+# stdlib/tst-secure-getenv makes a setgid program with it).
+id -nG tester | grep -qw users || usermod -a -G users tester
 chown -R tester:tester ..
-su tester -s /usr/bin/bash -c "PATH=$PATH make -k -j$JOBS check" > "$RESULTS/make-check.log" 2>&1 || true
+su tester -s /usr/bin/bash -c "PATH=$PATH LOCPATH=$L make -k -j$JOBS check" > "$RESULTS/make-check.log" 2>&1 || true
 chown -R root:root ..
 ../contrib/test_summary > "$RESULTS/test_summary.txt" 2>&1 || true
-find . \( -name '*.sum' -o -name '*.log' \) -path '*testsuite*' -exec cp --parents {} "$RESULTS/" \;
+# With -j, suites run in parts (gcc1/, normal1/, ...) that are merged into one
+# <tool>.sum at the end; use only the merged files, one per suite.
+sums=$(find . -name '*.sum' -path '*testsuite*' | grep -vE '/(gcc|g\+\+|normal)[0-9]+/' | sort)
+for f in $sums; do cp --parents "$f" "$RESULTS/"; [ -f "${f%.sum}.log" ] && cp --parents "${f%.sum}.log" "$RESULTS/"; done
 find "$RESULTS" -name '*.log' -size +5M -exec xz -T0 {} +
+# Every suite must have run to its end, each with a floor of its own, a little
+# under its full run (gcc 216760, g++ 248904, libstdc++ 20066, libgomp 6034,
+# libatomic 54, libitm 44 passes), so that one small suite running nothing
+# cannot hide in the total.
 python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
-  --min-pass 1 $(find . -name '*.sum' -path '*testsuite*')
+  --min-pass 480000 --require gcc=210000 --require g++=240000 --require libstdc++=19500 \
+  --require libgomp=5800 --require libatomic=50 --require libitm=40 $sums
 '''
 
 [ai]

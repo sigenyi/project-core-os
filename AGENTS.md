@@ -39,6 +39,8 @@ cargo test --workspace --locked
 
 shellcheck -x os/tools/*.sh tools/*/*.sh
 python3 -m py_compile os/tools/*.py os/recipes/*/*.py
+python3 os/recipes/lib/compare-results.py --self-test
+python3 os/tools/boot-test.py --self-test
 cargo run -q -p core-build -- --work /tmp/core-w --recipes os status   # recipes parse and are complete
 ```
 
@@ -63,8 +65,22 @@ Do not add `cfg` stubs or fake macOS implementations to make it compile there.
 
 ## Do not, unless the user asks
 
-* Build the base OS (`core-build fetch`, `bootstrap`, `world`, `os/tools/mkimage.sh`,
-  `os/tools/boot-test.py`). It needs a Linux host, root, about 25 GB and hours.
+* Build the base OS (`core-build fetch`, `bootstrap`, `world`, `build`, any
+  `--check` run, `os/tools/mkimage.sh`, `os/tools/boot-test.py`). It needs a Linux
+  host, root, about 25 GB and hours.
+* Run `core-build prune`: it deletes every file in the build root that no package
+  owns. Use `--dry-run` to see what it would remove.
+* Unmount anything in the build root. When core-build refuses to start because
+  something is already mounted there, report the mounts it lists: they may belong
+  to a build that is still running.
+* Loosen a test gate: lower a `--min-pass` or `--require` floor, add an entry to
+  an `expected-failures.txt` without a comment giving its cause, or accept a
+  `cpkg verify` finding in `os/tools/boot-test.py` without saying why it is
+  expected.
+* When reporting build or test results, say exactly what ran: which packages a
+  run rebuilt and which it skipped as up to date, and the bad results accepted
+  as documented exceptions. A run without `--force` is not a clean rebuild
+  (`docs/BASE-OS.md`, "How the current packages were built").
 * Run anything with `sudo`, or run `core-guardian` without `--dry-run`.
 * Commit keys, models or build output: signing keys (`~/core-keys`), `*.gguf`,
   `*.iso`, `target/`, `image/`.

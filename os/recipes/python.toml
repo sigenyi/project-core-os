@@ -13,9 +13,22 @@ file = "python3.14_3.14.4.orig.tar.xz"
 
 [build]
 script = '''
-./configure --prefix=/usr --enable-shared --with-system-expat --without-static-libpython
+# pip is installed below rather than by "make install", whose ensurepip step
+# skips pip when the build machine's Python already has it, so the package
+# would depend on what happens to be installed.
+./configure --prefix=/usr --enable-shared --with-system-expat --without-static-libpython \
+  --with-ensurepip=no
 make
 make DESTDIR="$DESTDIR" install
+# The bundled pip wheel installs itself, with the new interpreter, ignoring any
+# installed pip (-s -E: no user or environment paths).
+whl=$(echo Lib/ensurepip/_bundled/pip-*.whl)
+test -f "$whl"
+LD_LIBRARY_PATH="$PWD" ./python -s -E "$whl/pip" install --no-index --no-deps --ignore-installed \
+  --no-warn-script-location --root-user-action=ignore --disable-pip-version-check \
+  --root="$DESTDIR" "$whl"
+test -x "$DESTDIR/usr/bin/pip3"
+ls "$DESTDIR"/usr/lib/python3.14/site-packages/pip-*.dist-info/RECORD
 ln -sf python3 "$DESTDIR/usr/bin/python"
 ln -sf pip3 "$DESTDIR/usr/bin/pip"
 cat > "$DESTDIR/usr/lib/python3.14/EXTERNALLY-MANAGED" <<EM

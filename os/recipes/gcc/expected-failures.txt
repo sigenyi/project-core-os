@@ -1,3 +1,179 @@
-# Test results for gcc that are expected to be bad on C.O.R.E. OS's build
-# machine, one "STATUS: test" line each, as it appears in the .sum files.
+# Test results for GCC that are expected to be bad on C.O.R.E. OS, one
+# "STATUS: test" line each, as it appears in the merged .sum files.
 # Every entry has a comment above it saying why it is expected.
+
+# glibc 2.43 makes strchr (and bsearch, memchr, strpbrk, strrchr, strstr and the
+# wcs*/wmemchr functions) const-preserving macros in C23, GCC 15's default
+# dialect. test_3 then gets a correct "discards 'const'" warning, and the
+# analyzer's over-read and uninitialized-read reports are located inside glibc's
+# macro in <string.h>, where GCC suppresses warnings by default; -Wsystem-headers
+# shows both, and with -std=gnu17 every expected diagnostic appears. This is a
+# known issue for users too (docs/BASE-OS.md): ordinary warnings such as
+# -Wnonnull at these calls are also hidden in C23.
+FAIL: gcc.dg/analyzer/strchr-1.c  (test for warnings, line 32)
+FAIL: gcc.dg/analyzer/strchr-1.c  (test for warnings, line 39)
+FAIL: gcc.dg/analyzer/strchr-1.c (test for excess errors)
+FAIL: gcc.dg/analyzer/strchr-1.c event at line 33 (test for warnings, line 32)
+FAIL: gcc.dg/analyzer/strchr-1.c event at line 40 (test for warnings, line 39)
+
+# These tests load a test-only analyzer plugin (analyzer_cpython_plugin.cc, not
+# installed) against the installed Python 3.14 headers, which it predates: it
+# crashes on PyObject's anonymous ob_refcnt union (get_field_by_name() reads the
+# NULL DECL_NAME of the unnamed member) and expects PyLongObject's ob_digit
+# where Python >= 3.12 has moved it into long_value. The compiler itself
+# compiles all three tests cleanly without the plugin.
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 17)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 28)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 36)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 39)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 41)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 42)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  at line 18 (test for warnings, line 17)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so  at line 43 (test for warnings, line 42)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so (internal compiler error: Segmentation fault)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_Append.c -fplugin=./analyzer_cpython_plugin.so (test for excess errors)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 17)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 18)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 21)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 29)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so  at line 37 (test for warnings, line 36)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so (internal compiler error: Segmentation fault)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyList_New.c -fplugin=./analyzer_cpython_plugin.so (test for excess errors)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 17)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 18)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 21)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  (test for warnings, line 29)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so  at line 37 (test for warnings, line 36)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so (internal compiler error: Segmentation fault)
+FAIL: gcc.dg/plugin/cpython-plugin-test-PyLong_FromLong.c -fplugin=./analyzer_cpython_plugin.so (test for excess errors)
+
+# The optimization under test happens (four scalar vaddsd loads from r), but
+# with --enable-default-pie GCC prints the operands as "40+r(%rip)" and the
+# test's patterns only accept "r+40".
+FAIL: gcc.target/i386/pr90579.c scan-assembler vaddsd\tr\\+16
+FAIL: gcc.target/i386/pr90579.c scan-assembler vaddsd\tr\\+24
+FAIL: gcc.target/i386/pr90579.c scan-assembler vaddsd\tr\\+32
+FAIL: gcc.target/i386/pr90579.c scan-assembler vaddsd\tr\\+40
+
+# guality (debug-info quality) tests, run with gdb 17.1. Each failing variable was
+# checked against the DWARF: at these optimization levels GCC emits no location
+# covering the breakpoint (or a wrong one), and gdb reports exactly what the
+# DWARF says. Every test passes at -O0. Upstream GCC limitations, per test:
+# pr55665.C: With -flto -flto-partition=none, GCC's early-LTO-debug scheme splits the function-local static 'p' in A::A in two.
+FAIL: g++.dg/guality/pr55665.C   -O2 -flto -fno-use-linker-plugin -flto-partition=none  line 23 p == 40
+# loop-1.c: At -O2 and -O3, with or without LTO, GCC turns the do-while into an unrolled loop counted in %eax.
+FAIL: gcc.dg/guality/loop-1.c   -O2  -DPREVENT_OPTIMIZATION  line 20 i == 1
+FAIL: gcc.dg/guality/loop-1.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 20 i == 1
+FAIL: gcc.dg/guality/loop-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 20 i == 1
+FAIL: gcc.dg/guality/loop-1.c   -O3 -fomit-frame-pointer -funroll-loops -fpeel-loops -ftracer -finline-functions  -DPREVENT_OPTIMIZATION  line 20 i == 1
+FAIL: gcc.dg/guality/loop-1.c   -O3 -g  -DPREVENT_OPTIMIZATION  line 20 i == 1
+# pr43051-1.c: At -O3 -funroll-loops -fpeel-loops -ftracer, the location list GCC emits for parameter c in bar has a gap from 0x11fb to 0x1235.
+FAIL: gcc.dg/guality/pr43051-1.c   -O3 -fomit-frame-pointer -funroll-loops -fpeel-loops -ftracer -finline-functions  -DPREVENT_OPTIMIZATION  line 34 c == &a[0]
+FAIL: gcc.dg/guality/pr43051-1.c   -O3 -fomit-frame-pointer -funroll-loops -fpeel-loops -ftracer -finline-functions  -DPREVENT_OPTIMIZATION  line 39 c == &a[0]
+# pr43593.c: At -O2/-O3/-Os, including the LTO variants, GCC 15.2 gives the DW_TAG_variable for 'j' in foo() no DW_AT_location and no DW_AT_const_value.
+FAIL: gcc.dg/guality/pr43593.c   -O2  -DPREVENT_OPTIMIZATION  line 16 j == &i
+FAIL: gcc.dg/guality/pr43593.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 16 j == &i
+FAIL: gcc.dg/guality/pr43593.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 16 j == &i
+FAIL: gcc.dg/guality/pr43593.c   -O3 -g  -DPREVENT_OPTIMIZATION  line 16 j == &i
+FAIL: gcc.dg/guality/pr43593.c   -Os  -DPREVENT_OPTIMIZATION  line 16 j == &i
+# pr54519-1.c: With -O2 -flto, fn2 is split by IPA (the outlined fn2 body has its unused y/z parameters removed) and the pieces are inlined back into fn3/fn4.
+FAIL: gcc.dg/guality/pr54519-1.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 20 y == 25
+FAIL: gcc.dg/guality/pr54519-1.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 20 z == 6
+FAIL: gcc.dg/guality/pr54519-1.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 23 y == 117
+FAIL: gcc.dg/guality/pr54519-1.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 23 z == 8
+FAIL: gcc.dg/guality/pr54519-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 20 y == 25
+FAIL: gcc.dg/guality/pr54519-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 20 z == 6
+FAIL: gcc.dg/guality/pr54519-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 23 y == 117
+FAIL: gcc.dg/guality/pr54519-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 23 z == 8
+# pr54519-2.c: With -O2 -flto, GCC's DWARF for y in the copy of fn2 inlined into fn3/fn4 has no location at the line-17 breakpoint.
+FAIL: gcc.dg/guality/pr54519-2.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 17 y == 25
+FAIL: gcc.dg/guality/pr54519-2.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 17 y == 25
+# pr54519-3.c: With -O2 -flto, the LTRANS stage splits fn2 (ipa-split) and inlines the split-off body back into fn2.
+FAIL: gcc.dg/guality/pr54519-3.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 20 y == 25
+FAIL: gcc.dg/guality/pr54519-3.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 20 z == 6
+FAIL: gcc.dg/guality/pr54519-3.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 23 y == 117
+FAIL: gcc.dg/guality/pr54519-3.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 23 z == 8
+FAIL: gcc.dg/guality/pr54519-3.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 20 y == 25
+FAIL: gcc.dg/guality/pr54519-3.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 20 z == 6
+FAIL: gcc.dg/guality/pr54519-3.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 23 y == 117
+FAIL: gcc.dg/guality/pr54519-3.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 23 z == 8
+# pr54519-4.c: With -O2 -flto, GCC emits a location list for parameter y of fn2 that starts only at 0x119d, where y is recomputed as -2 + x.
+FAIL: gcc.dg/guality/pr54519-4.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 17 y == 25
+FAIL: gcc.dg/guality/pr54519-4.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 17 y == 25
+# pr54519-5.c: With -O2 -flto, IPA merges fn4 into fn3 through ICF and inlines fn2 into fn3 twice, once nested inside the other.
+FAIL: gcc.dg/guality/pr54519-5.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 17 y == 25
+FAIL: gcc.dg/guality/pr54519-5.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 17 y == 25
+# pr54519-6.c: At -Os, main collapses to a string of NOPs, with f2 and f1 inlined twice each.
+FAIL: gcc.dg/guality/pr54519-6.c   -Os  -DPREVENT_OPTIMIZATION  line 11 x == 2
+# pr54693-2.c: With -flto -fuse-linker-plugin -fno-fat-lto-objects, whole-program optimization makes foo local.
+FAIL: gcc.dg/guality/pr54693-2.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 21 x == 10 - i
+FAIL: gcc.dg/guality/pr54693-2.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 21 y == 20 - 2 * i
+FAIL: gcc.dg/guality/pr54693-2.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 21 z == 30 - 3 * i
+# pr54796.c: This is a GCC debug-info gap.
+FAIL: gcc.dg/guality/pr54796.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 17 c == 5
+# pr56154-1.c: At -Og, GCC removes the dead store `x.a = 6`, which comes just before the line-20 asm.
+FAIL: gcc.dg/guality/pr56154-1.c  -Og -DPREVENT_OPTIMIZATION  line pr56154-1.c:20 x.a == 6
+# pr59776.c: At -Og, GCC does not run SRA, so it never splits the local structs s1 and s2 into scalars and emits no debug binds for their fields.
+FAIL: gcc.dg/guality/pr59776.c  -Og -DPREVENT_OPTIMIZATION  line pr59776.c:17 s1.f == 5.0
+FAIL: gcc.dg/guality/pr59776.c  -Og -DPREVENT_OPTIMIZATION  line pr59776.c:17 s1.g == 6.0
+FAIL: gcc.dg/guality/pr59776.c  -Og -DPREVENT_OPTIMIZATION  line pr59776.c:17 s2.f == 0.0
+FAIL: gcc.dg/guality/pr59776.c  -Og -DPREVENT_OPTIMIZATION  line pr59776.c:20 s1.f == 5.0
+FAIL: gcc.dg/guality/pr59776.c  -Og -DPREVENT_OPTIMIZATION  line pr59776.c:20 s1.g == 6.0
+FAIL: gcc.dg/guality/pr59776.c  -Og -DPREVENT_OPTIMIZATION  line pr59776.c:20 s2.f == 5.0
+# sra-1.c: At -Og and at -O2 -flto -fno-fat-lto-objects, GCC 15.2 emits no location for the SRA'd local `a` at the breakpoint PCs, so gdb correctly prints <optimized out>.
+FAIL: gcc.dg/guality/sra-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 21 a.i == 4
+FAIL: gcc.dg/guality/sra-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 21 a.j == 14
+FAIL: gcc.dg/guality/sra-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 32 a[0] == 4
+FAIL: gcc.dg/guality/sra-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 32 a[1] == 14
+FAIL: gcc.dg/guality/sra-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 43 a.i == 4
+FAIL: gcc.dg/guality/sra-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 43 a.j == 14
+FAIL: gcc.dg/guality/sra-1.c  -Og -DPREVENT_OPTIMIZATION  line 21 a.i == 4
+FAIL: gcc.dg/guality/sra-1.c  -Og -DPREVENT_OPTIMIZATION  line 21 a.j == 14
+FAIL: gcc.dg/guality/sra-1.c  -Og -DPREVENT_OPTIMIZATION  line 32 a[0] == 4
+FAIL: gcc.dg/guality/sra-1.c  -Og -DPREVENT_OPTIMIZATION  line 32 a[1] == 14
+FAIL: gcc.dg/guality/sra-1.c  -Og -DPREVENT_OPTIMIZATION  line 43 a.i == 4
+FAIL: gcc.dg/guality/sra-1.c  -Og -DPREVENT_OPTIMIZATION  line 43 a.j == 14
+
+# vla-1.c, vla-2.c: with --enable-default-ssp (our deliberate hardening default)
+# GCC drops the location of the VLA's bound; with -fno-stack-protector gdb prints
+# sizeof (a) == 20 for vla-2.c as expected. A GCC var-tracking weakness under SSP.
+FAIL: gcc.dg/guality/vla-1.c   -O2  -DPREVENT_OPTIMIZATION  line 24 sizeof (a) == 17 * sizeof (short)
+FAIL: gcc.dg/guality/vla-1.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 24 sizeof (a) == 17 * sizeof (short)
+FAIL: gcc.dg/guality/vla-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 24 sizeof (a) == 17 * sizeof (short)
+FAIL: gcc.dg/guality/vla-1.c   -O3 -g  -DPREVENT_OPTIMIZATION  line 24 sizeof (a) == 17 * sizeof (short)
+FAIL: gcc.dg/guality/vla-1.c   -Os  -DPREVENT_OPTIMIZATION  line 24 sizeof (a) == 17 * sizeof (short)
+FAIL: gcc.dg/guality/vla-2.c   -O2  -DPREVENT_OPTIMIZATION  line 16 sizeof (a) == 5 * sizeof (int)
+FAIL: gcc.dg/guality/vla-2.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 16 sizeof (a) == 5 * sizeof (int)
+FAIL: gcc.dg/guality/vla-2.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 16 sizeof (a) == 5 * sizeof (int)
+FAIL: gcc.dg/guality/vla-2.c   -O3 -g  -DPREVENT_OPTIMIZATION  line 16 sizeof (a) == 5 * sizeof (int)
+FAIL: gcc.dg/guality/vla-2.c   -Os  -DPREVENT_OPTIMIZATION  line 16 sizeof (a) == 5 * sizeof (int)
+
+# These XPASS because upstream marks them as expected failures more broadly than
+# needed; gdb 17.1 evaluates them correctly here (they include -O0 runs).
+# example.c: The test has `dg-do run { xfail { ! aarch64*-*-* } }`, so the execution test is expected to fail on every non-aarch64 target at every optimization level.
+XPASS: gcc.dg/guality/example.c   -O0  execution test
+XPASS: gcc.dg/guality/example.c   -O1  -DPREVENT_OPTIMIZATION  execution test
+XPASS: gcc.dg/guality/example.c  -Og -DPREVENT_OPTIMIZATION  execution test
+# guality.c: guality.c is the guality harness's own sanity check.
+XPASS: gcc.dg/guality/guality.c   -O0  execution test
+XPASS: gcc.dg/guality/guality.c   -O1  -DPREVENT_OPTIMIZATION  execution test
+XPASS: gcc.dg/guality/guality.c   -O2  -DPREVENT_OPTIMIZATION  execution test
+XPASS: gcc.dg/guality/guality.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION execution test
+XPASS: gcc.dg/guality/guality.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION execution test
+XPASS: gcc.dg/guality/guality.c   -O3 -g  -DPREVENT_OPTIMIZATION  execution test
+XPASS: gcc.dg/guality/guality.c   -Os  -DPREVENT_OPTIMIZATION  execution test
+XPASS: gcc.dg/guality/guality.c  -Og -DPREVENT_OPTIMIZATION  execution test
+# inline-params.c: The test has the directive dg-xfail-run-if "" { ! aarch64*-*-* } { "-O2" "-O3" "-Os" }.
+XPASS: gcc.dg/guality/inline-params.c   -O2  -DPREVENT_OPTIMIZATION  execution test
+XPASS: gcc.dg/guality/inline-params.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION execution test
+XPASS: gcc.dg/guality/inline-params.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION execution test
+XPASS: gcc.dg/guality/inline-params.c   -O3 -g  -DPREVENT_OPTIMIZATION  execution test
+XPASS: gcc.dg/guality/inline-params.c   -Os  -DPREVENT_OPTIMIZATION  execution test
+# pr41353-1.c: Upstream marks the line-28 check of j with `xfail { { ! aarch64-*-* } && { no-opts "-O0" } }`.
+XPASS: gcc.dg/guality/pr41353-1.c   -O1  -DPREVENT_OPTIMIZATION  line 28 j == 28 + 37
+XPASS: gcc.dg/guality/pr41353-1.c   -O2  -DPREVENT_OPTIMIZATION  line 28 j == 28 + 37
+XPASS: gcc.dg/guality/pr41353-1.c   -O2 -flto -fno-use-linker-plugin -flto-partition=none  -DPREVENT_OPTIMIZATION line 28 j == 28 + 37
+XPASS: gcc.dg/guality/pr41353-1.c   -O2 -flto -fuse-linker-plugin -fno-fat-lto-objects  -DPREVENT_OPTIMIZATION line 28 j == 28 + 37
+XPASS: gcc.dg/guality/pr41353-1.c   -O3 -g  -DPREVENT_OPTIMIZATION  line 28 j == 28 + 37
+XPASS: gcc.dg/guality/pr41353-1.c   -Os  -DPREVENT_OPTIMIZATION  line 28 j == 28 + 37
+XPASS: gcc.dg/guality/pr41353-1.c  -Og -DPREVENT_OPTIMIZATION  line 28 j == 28 + 37

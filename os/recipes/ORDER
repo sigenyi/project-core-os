@@ -2,6 +2,7 @@
 filesystem
 man-pages
 netbase
+linux-api-headers
 glibc
 tzdata
 zlib
@@ -22,6 +23,7 @@ binutils
 gmp
 mpfr
 mpc
+isl
 attr
 acl
 libcap
@@ -53,8 +55,11 @@ python
 python-flit-core
 python-wheel
 python-setuptools
+python-ptyprocess
+python-pexpect
 ninja
 meson
+gdb
 kmod
 coreutils
 diffutils

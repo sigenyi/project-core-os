@@ -54,6 +54,13 @@ enum Cmd {
         #[arg(long)]
         key: PathBuf,
     },
+    /// Remove files no installed package owns from the build root (leftovers of
+    /// the bootstrap), so later builds see exactly the packaged system.
+    Prune {
+        /// Only list what would be removed.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Interactive shell inside the build root.
     Shell,
     /// Show which recipes are built.
@@ -137,6 +144,19 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             write_index(&b.repo(), &index, &sk)?;
             println!("indexed {} packages in {}", index.packages.len(), b.repo().display());
+        }
+        Cmd::Prune { dry_run } => {
+            let pruned = core_build::prune::prune(&b.root(), dry_run)?;
+            let log = cli.work.join("logs").join("prune.log");
+            std::fs::create_dir_all(log.parent().unwrap()).map_err(|e| e.to_string())?;
+            std::fs::write(&log, pruned.removed.join("\n") + "\n").map_err(|e| e.to_string())?;
+            let verb = if dry_run { "would remove" } else { "removed" };
+            println!(
+                "{verb} {} unowned paths from {} (list in {})",
+                pruned.removed.len(),
+                b.root().display(),
+                log.display()
+            );
         }
         Cmd::Shell => b.shell()?,
         Cmd::Status => {

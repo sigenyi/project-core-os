@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use core_pkg::archive::{read_metadata, sha256_file};
+use core_pkg::archive::read_metadata;
 use core_pkg::db::Db;
-use core_pkg::manifest::FileKind;
 use core_pkg::repo::{self, Index, Repository};
 use core_pkg::resolve;
 use core_pkg::transaction::{self, Options, Report};
+use core_pkg::verify;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -71,7 +71,8 @@ enum Cmd {
     Search { words: Vec<String> },
     /// Explain why a package is installed (what depends on it).
     Why { package: String },
-    /// Check installed files against the database.
+    /// Check installed files against the database. Fails if a file is missing,
+    /// changed or replaced; changed configuration under /etc is reported only.
     Verify { packages: Vec<String> },
     /// Show the transaction history.
     History,
@@ -149,6 +150,8 @@ fn main() -> ExitCode {
     let ctx = Ctx { root: cli.root.clone(), json: cli.json, repo_args: cli.repos.clone(), verify: !cli.no_verify };
     match run(&ctx, cli.cmd) {
         Ok(()) => ExitCode::SUCCESS,
+        // An empty error: the command has already reported why it failed.
+        Err(e) if e.is_empty() => ExitCode::FAILURE,
         Err(e) => {
             if ctx.json {
                 println!("{}", json!({"error": e}));
@@ -405,48 +408,30 @@ fn run(ctx: &Ctx, cmd: Cmd) -> Result<(), String> {
         }
         Cmd::Verify { packages } => {
             let db = Db::open(&ctx.root)?;
-            let mut problems = Vec::new();
-            for (name, p) in &db.packages {
-                if !packages.is_empty() && !packages.contains(name) {
-                    continue;
-                }
-                for f in &p.files {
-                    let path = ctx.root.join(&f.path);
-                    match f.kind {
-                        FileKind::File | FileKind::Hardlink => match sha256_file(&path) {
-                            Err(_) => problems.push(json!({"package": name, "path": f.path, "problem": "missing"})),
-                            Ok(h) if f.kind == FileKind::File && h != f.sha256 => {
-                                let what = if f.is_config() { "modified configuration" } else { "modified" };
-                                problems.push(json!({"package": name, "path": f.path, "problem": what}));
-                            }
-                            Ok(_) => {}
-                        },
-                        FileKind::Symlink | FileKind::Dir => {
-                            if std::fs::symlink_metadata(&path).is_err() {
-                                problems.push(json!({"package": name, "path": f.path, "problem": "missing"}));
-                            }
-                        }
-                    }
-                }
-            }
-            print(ctx, Value::Array(problems.clone()), || {
-                if problems.is_empty() {
+            let findings = verify::verify(&db, &packages)?;
+            let failures = findings.iter().filter(|f| f.failure).count();
+            print(ctx, json!({"ok": failures == 0, "findings": findings}), || {
+                if findings.is_empty() {
                     "all files intact".into()
                 } else {
-                    problems
+                    findings
                         .iter()
-                        .map(|p| {
-                            format!(
-                                "{}: /{} {}",
-                                p["package"].as_str().unwrap(),
-                                p["path"].as_str().unwrap(),
-                                p["problem"].as_str().unwrap()
-                            )
-                        })
+                        .map(|f| format!("{}: /{} {}", f.package, f.path, f.problem.as_str()))
                         .collect::<Vec<_>>()
                         .join("\n")
                 }
             });
+            if failures > 0 {
+                // Already reported on stdout; in JSON mode, no second document.
+                return Err(if ctx.json {
+                    String::new()
+                } else {
+                    format!(
+                        "{failures} integrity problem{} (modified configuration is not counted)",
+                        if failures == 1 { "" } else { "s" }
+                    )
+                });
+            }
             Ok(())
         }
         Cmd::History => {

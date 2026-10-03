@@ -21,7 +21,7 @@ use core_pkg::archive::{create_package, sha256_bytes};
 use core_pkg::db::Db;
 use core_pkg::transaction::{self, Options, Report};
 
-use crate::env::{CHROOT, Mounts, Place, run_script};
+use crate::env::{Mounts, Place, command_in_root, run_script};
 use crate::post;
 use crate::recipe::{Recipe, Stage};
 use crate::source;
@@ -269,6 +269,7 @@ impl Builder {
             let n = post::strip(dest, &root)?;
             log::info!("{}: stripped {n} files", r.package.name);
         }
+        check_no_dropped_files(r, &root, dest)?;
         let repo = self.repo();
         let pkg = create_package(dest, r.manifest(self.epoch), &repo)?;
         // Then drop older builds of this package (other versions) from the repository.
@@ -306,15 +307,40 @@ impl Builder {
     /// Run an interactive shell inside the build root.
     pub fn shell(&mut self) -> Result<(), String> {
         self.ensure_mounts()?;
-        let mut cmd = Command::new(CHROOT);
-        cmd.arg(self.root()).arg("/usr/bin/env").arg("-i");
-        for (k, v) in self.base_env() {
-            cmd.arg(format!("{k}={v}"));
-        }
-        cmd.args(["PATH=/usr/bin:/usr/sbin", "PS1=(core-build) \\w \\$ ", "/usr/bin/bash", "--login"]);
+        let mut cmd = command_in_root(&self.root(), "/usr/bin/bash")?;
+        cmd.arg("--login").env_clear().envs(self.base_env());
+        cmd.env("PATH", "/usr/bin:/usr/sbin").env("PS1", "(core-build) \\w \\$ ");
         cmd.status().map_err(|e| e.to_string())?;
         Ok(())
     }
+}
+
+/// A rebuild at the same version and release must not lose files the installed
+/// build has. That happens when an install step looks at the running system (pip
+/// and ensurepip skip what is already installed there), so a package would depend
+/// on what the build root happened to contain. A deliberate removal comes with a
+/// new release number.
+fn check_no_dropped_files(r: &Recipe, root: &Path, dest: &Path) -> Result<(), String> {
+    let db = Db::open(root)?;
+    let Some(old) = db.get(&r.package.name) else { return Ok(()) };
+    let m = &old.manifest.package;
+    if m.version != r.package.version || m.release != r.package.release {
+        return Ok(());
+    }
+    let dropped: Vec<&str> =
+        old.files.iter().map(|f| f.path.as_str()).filter(|p| fs::symlink_metadata(dest.join(p)).is_err()).collect();
+    if dropped.is_empty() {
+        return Ok(());
+    }
+    let shown: Vec<&str> = dropped.iter().take(20).copied().collect();
+    Err(format!(
+        "this build of {} lacks {} paths the installed build of the same version has \
+         (bump the release if that is intended):\n  {}{}",
+        r.id(),
+        dropped.len(),
+        shown.join("\n  "),
+        if dropped.len() > shown.len() { "\n  ..." } else { "" }
+    ))
 }
 
 /// The AI launches programs by the name a package declares, so that name must be a

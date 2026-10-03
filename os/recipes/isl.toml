@@ -1,0 +1,21 @@
+[package]
+name = "isl"
+version = "0.27"
+summary = "Integer set library (GCC's Graphite loop optimizations)"
+license = "MIT"
+homepage = "https://libisl.sourceforge.io/"
+
+[[source]]
+sha256 = "6d8babb59e7b672e8cb7870e874f3f7b813b6e00e6af3f8b04f7579965643d5c"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/i/isl/isl_0.27.orig.tar.xz"]
+
+[build]
+script = '''
+./configure --prefix=/usr --disable-static --docdir=/usr/share/doc/isl-0.27
+make
+make DESTDIR="$DESTDIR" install
+# isl installs a gdb helper next to the library; keep it with the other
+# auto-load scripts.
+mkdir -p "$DESTDIR/usr/share/gdb/auto-load/usr/lib"
+mv "$DESTDIR"/usr/lib/libisl*gdb.py "$DESTDIR/usr/share/gdb/auto-load/usr/lib/" 2>/dev/null || true
+'''

@@ -1,17 +1,16 @@
 [package]
-name = "python-jinja2"
-version = "3.1.6"
-summary = "Python template engine"
-license = "BSD-3-Clause"
-homepage = "https://palletsprojects.com/p/jinja/"
+name = "python-ptyprocess"
+version = "0.7.0"
+summary = "Python module to run programs in a pseudo-terminal"
+license = "ISC"
+homepage = "https://github.com/pexpect/ptyprocess"
 
 [[source]]
-sha256 = "0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d"
-urls = ["https://archive.ubuntu.com/ubuntu/pool/main/j/jinja2/jinja2_3.1.6.orig.tar.gz"]
+sha256 = "fdba7eb7833d8bbfb7cdab6d7a348fa0e393078324e406d0ebdad6ae93ed4209"
+urls = ["https://archive.ubuntu.com/ubuntu/pool/main/p/ptyprocess/ptyprocess_0.7.0.orig.tar.gz"]
 
 [build]
 script = '''
-cd .
 pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps "$PWD"
 # --ignore-installed: otherwise pip skips a wheel whose version the build machine
 # already has, and the package comes out empty.

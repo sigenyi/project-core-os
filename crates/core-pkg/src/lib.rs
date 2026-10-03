@@ -22,6 +22,7 @@ pub mod manifest;
 pub mod repo;
 pub mod resolve;
 pub mod transaction;
+pub mod verify;
 pub mod version;
 
 pub use archive::create_package;

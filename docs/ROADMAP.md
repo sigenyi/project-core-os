@@ -30,7 +30,10 @@ See [BASE-OS.md](BASE-OS.md).
 - [x] `core-build`: pinned sources, cross toolchain, chroot builds, merged-/usr
       normalisation, packaging, resumable builds
 - [x] Bootstrap recipes (cross toolchain `x86_64-core-linux-gnu`, temporary tools)
-- [x] Base-system recipes: glibc, GCC, systemd, Linux 7.0, GRUB and 75 more
+- [x] Base-system recipes: glibc, GCC, systemd, Linux 7.0, GRUB and 84 more
+- [x] Toolchain test suites (glibc, binutils, GCC) run on every build with
+      `--check`; every unexpected result fixed or documented with its cause
+- [ ] Test suites for the rest of the base (Python, Perl, coreutils, ...)
 - [x] Image assembly from packages only; boots in QEMU with BIOS and UEFI and
       passes `os/tools/boot-test.py`
 - [ ] Move the Guardian's package and network actions from pacman and
