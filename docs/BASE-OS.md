@@ -62,6 +62,7 @@ checksum.
 | binutils 2.46 (temporary) | libtool would link libctf against the host's libraries | Drop `$add_dir` in `ltmain.sh`, as Linux From Scratch does |
 | glibc 2.43 | The public x86 `struct_mutex.h` renamed a field to `__unused`, which BSD-derived and portable code defines as a macro, so `<pthread.h>` stops compiling there (libstdc++'s `17_intro/names` tests catch it) | Restore the old name `__elision` (layout unchanged); the recipe checks the rename |
 | glibc 2.43 | The `tst-ifunc-isa` tests are meant to be expected failures only when linking with lld, but the Makefile tests `with-lld` for being non-empty, and it is `no` otherwise | `$(filter yes,$(with-lld))`; the recipe checks all four lines changed |
+| Python 3.14.4 | `make install` runs `ensurepip`, which skips pip when the build machine's Python already has it, so a rebuild produced a package without pip | Install the bundled pip wheel explicitly, ignoring installed copies (`pip install --ignore-installed` for the other wheels too). core-build now refuses a rebuild that loses files the installed build of the same version has |
 | Expect 5.45.4 | Its old `configure` probes are rejected by GCC 15 (C23 by default, and old-C diagnostics are errors), so it misdetects the terminal interface | Build as C17 with those diagnostics as warnings; the recipe checks the termios interface was chosen |
 
 ## Build stages
@@ -203,7 +204,7 @@ kernel mounts it by PARTUUID.
 
 ## Verified
 
-The image built from these recipes boots under QEMU (8 GB RAM) with both BIOS
+The image built from the tested rebuild (glibc, binutils and GCC suites passing) boots under QEMU (8 GB RAM) with both BIOS
 and UEFI firmware, and `os/tools/boot-test.py` passes on both. The test reaches a
 login prompt in about 25 seconds (software emulation, no KVM), logs in as root
 with the forced password change, and checks:
@@ -211,12 +212,12 @@ with the forced password change, and checks:
 * Linux 7.0.0-core is running and systemd reports `running` with no failed units
   and no errors in the journal.
 * The root file system is mounted read-write from the GPT root partition.
-* Idle memory use is about 250 MB, within the 300 MB budget for an 8 GB machine.
+* Idle memory use is 254–268 MB, within the 300 MB budget for an 8 GB machine.
 * All 89 packages are installed, and `cpkg verify` and `cpkg why` work on the
   running system.
 * The native GCC compiles and runs C (with `-Werror`, against glibc and the
   kernel headers) and threaded C++, Graphite loop optimization works, GDB has
-  Python support, and Python has ssl, ctypes and the compression modules.
+  Python support, and Python has ssl, ctypes, the compression modules and pip.
 * `/dev/fuse` exists.
 * systemd-networkd gets an address by DHCP, and systemd-resolved answers.
 * Manual pages are installed.

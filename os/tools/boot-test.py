@@ -48,6 +48,7 @@ CHECKS = [
     ("debugger", "gdb -nx -batch -ex 'python print(\"gdb python ok\")'", r"gdb python ok"),
     ("FUSE", "test -c /dev/fuse && echo fuse-ok", r"fuse-ok"),
     ("python", "python3 -c 'import ssl, ctypes, bz2, lzma, zlib, readline; print(ssl.OPENSSL_VERSION)'", r"^OpenSSL 3\.5"),
+    ("pip", "pip3 --version", r"^pip \d+.* \(python 3\.14\)"),
     ("network", "networkctl --no-legend list | head -5; ip -4 -o addr show scope global | head -2", r"inet \d+\."),
     ("dns", "resolvectl status >/dev/null && echo resolved-ok", r"resolved-ok"),
     ("man pages", "man -w ls", r"/usr/share/man/man1/ls\.1"),
