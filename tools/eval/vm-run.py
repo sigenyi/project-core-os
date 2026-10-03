@@ -51,6 +51,8 @@ ROOT = taskspec.ROOT
 GUARDIAN_CONFIG = os.path.join(ROOT, "system", "etc", "core", "guardian.toml")
 SPLITS = os.path.join(ROOT, "eval", "splits.json")
 REPO_MOUNT = "/mnt/repo"
+# The trajectory schema whose fields this runner writes (core_protocol::trajectory).
+WRITES_SCHEMA = 2
 
 # Must match core-agent's prompt module (observe_report, observe_rejection).
 GUIDE_FAILED = "Find the cause in this error, then try a different approach or explain the problem to the user."
@@ -104,7 +106,14 @@ def observation(action, decision, reason, results):
     if decision == "deny":
         return "\n".join(x for x in (f"OBSERVATION ({action}: DENIED by system policy)", reason, GUIDE_DENIED) if x)
     failed = next((r for r in results if not r["ok"] and not r["optional"]), None)
-    status = "succeeded" if failed is None else f"FAILED, exit code {failed['rc']}"
+    if failed is None:
+        status = "succeeded"
+    elif failed.get("timed_out"):
+        status = "FAILED, timed out"
+    elif failed["rc"] is None:
+        status = "FAILED"
+    else:
+        status = f"FAILED, exit code {failed['rc']}"
     out = f"OBSERVATION ({action}: {status})"
     body = "\n".join(r["output"] for r in results if r["output"].strip()).strip()
     if body:
@@ -242,8 +251,13 @@ def run_task(task, a, bt, repo_disk, split, make_vm=VM, planner=plan):
             if sh(command, "fixture")[1] != 0:
                 raise RuntimeError(f"fixture failed: {command}")
         before = checks()
+        # From here on the episode has started: whatever goes wrong is recorded in
+        # its trajectory as a failure, not dropped.
         steps, decisions, outputs, failed, step_failures, ran = [], [], [], [], [], False
+        hung = None
         for n, intent in enumerate(task["solution"], 1):
+            if hung:
+                break
             intent = {"action": intent["action"], "args": intent.get("args", {})}
             p = planner(a.guardian, intent)
             decision = p["policy"]["decision"]
@@ -251,8 +265,26 @@ def run_task(task, a, bt, repo_disk, split, make_vm=VM, planner=plan):
             results = []
             if decision != "deny":
                 for step in p["steps"]:
-                    command = command_line(step)
-                    out, rc = sh(command, "solution")
+                    try:
+                        command = command_line(step)
+                    except ValueError as e:
+                        # The runner cannot carry this step out: not the solution's
+                        # fault, but the episode did not do what it should.
+                        failed.append(f"step cannot be replayed: {e}")
+                        step_failures.append({"step": n, "detail": f"cannot be replayed outside the Guardian: {e}"})
+                        results.append({"ok": False, "rc": None, "output": "", "optional": False})
+                        break
+                    try:
+                        out, rc = sh(command, "solution")
+                    except TimeoutError:
+                        # The console is busy with the hung command: nothing more
+                        # can run in this VM, so the episode ends here.
+                        ran = True
+                        hung = f"{command} timed out after {a.step_timeout}s"
+                        failed.append(hung)
+                        step_failures.append({"step": n, "detail": hung})
+                        results.append({"ok": False, "rc": None, "output": "", "optional": False, "timed_out": True})
+                        break
                     ran = True
                     results.append({"ok": rc in step["run"]["success_codes"], "rc": rc, "output": out,
                                     "optional": step["run"]["optional"]})
@@ -269,9 +301,14 @@ def run_task(task, a, bt, repo_disk, split, make_vm=VM, planner=plan):
         if task["kind"] == "observe":
             text = "\n".join(outputs)
             after = [{"name": f"output contains {s!r}", "passed": s in text} for s in task["expect"]["output"]]
+        elif hung:
+            # The checks cannot run; they are recorded as not passed.
+            after = [{"name": c["name"], "passed": False} for c in task.get("check", [])]
         else:
             after = checks()
         passed, reasons = judge(task, before, after, decisions, ran, failed)
+        if hung:
+            reasons.append("the episode ended early: a step hung and the state checks could not run")
         record.update(passed=passed, reasons=reasons, decisions=decisions, before=before, after=after,
                       undiscriminating=undiscriminating(task, before))
         # Every episode that ran is exported, failed ones too: they are useful
@@ -439,6 +476,28 @@ def self_test_episodes():
     o = r["trajectory"]["outcome"]
     assert r["passed"] and o["verdict"] == "passed" and o["step_failures"] == [] and o["reasons"] == [], r
 
+    # A step that hangs: exported as a failure, with the checks marked not passed.
+    class Hangs(FakeVM):
+        def run(self, command):
+            if command == "/usr/bin/systemctl start -- x":
+                raise TimeoutError("waiting for marker")
+            return ("", 1) if command == "check x" else super().run(command)
+
+    r = run_task(task, Args, None, None, "train", make_vm=Hangs({}), planner=planner)
+    o = r["trajectory"]["outcome"]
+    assert o["verdict"] == "failed" and o["step_failures"][0]["detail"].endswith("timed out after 1s"), o
+    assert o["checks"] == [{"name": "x runs", "passed": False}] and any("ended early" in x for x in o["reasons"]), o
+    assert "FAILED, timed out" in r["trajectory"]["steps"][0]["observation"]
+
+    # A step the runner cannot replay (a native Guardian operation): a failure too.
+    def native(_guardian, _intent):
+        return {"policy": {"decision": "allow"}, "steps": [{"native": "write /etc/hostname"}]}
+
+    check_results = iter([("", 1), ("", 1)])
+    r = run_task(task, Args, None, None, "train", make_vm=Flaky({}), planner=native)
+    o = r["trajectory"]["outcome"]
+    assert o["verdict"] == "failed" and "cannot be replayed" in o["step_failures"][0]["detail"], o
+
     # A fixture that cannot be applied is not an episode: nothing is exported.
     r = episode({"break x": ("no such unit", 1)})
     assert not r["passed"] and "trajectory" not in r, r
@@ -482,7 +541,10 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     info = subprocess.run([a.core_ctl, "contract"], capture_output=True, text=True, check=True).stdout
     a.contract = re.search(r"^fingerprint:\s*(sha256:[0-9a-f]{64})$", info, re.M).group(1)
-    a.schema = int(re.search(r"^trajectory schema:\s*(\d+)$", info, re.M).group(1))
+    m = re.search(r"^trajectory schema:\s*(\d+)$", info, re.M)
+    a.schema = int(m.group(1)) if m else None
+    if a.schema != WRITES_SCHEMA:
+        sys.exit(f"{a.core_ctl} expects trajectory schema {a.schema}; this runner writes schema {WRITES_SCHEMA}")
     a.stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     image_sha = sha256_file(a.image)
     bt = boot_test()

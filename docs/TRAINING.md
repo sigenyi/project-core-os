@@ -86,8 +86,10 @@ checks. The format is defined in `core_protocol::trajectory` and checked by
   addresses, non-loopback IP addresses (also in URLs, with ports, IPv4-mapped) and
   user names in home paths become placeholders; typed arguments get reserved
   documentation values (192.0.2.1, 2001:db8::1, /home/user) so they still
-  validate. A four-part version number reads as an IPv4 address and is scrubbed
-  too;
+  validate. Loopback, unspecified and documentation addresses are kept however
+  they are spelled. Some text that only looks like an address is scrubbed too: a
+  four-part version number (6.10.5.1) or a hex word before "::" (add::). Check names,
+  reasons and failure details are sanitized like observations;
 - every record names its contract fingerprint, fixture, split and outcome.
 
 The outcome (schema 2) records the state checks, whether the episode ran in a VM,
@@ -96,9 +98,17 @@ every required command that failed (`step_failures`, by step) and the runner's
 all of these agree: a passed verdict, no failed step, a real VM and passing checks.
 A required command that failed is a failure even if the checks pass afterwards.
 Failed episodes are kept as valid records, because they are useful examples, but
-nothing counts them as successes. `trajectory check` rejects contradictory outcomes
-(a passed verdict with a failed step or check, or a failed one without reasons) and
-schema 1 records, and reports how many valid records succeeded and how many failed.
+nothing counts them as successes. `trajectory check` rejects schema 1 records and
+outcomes that contradict themselves or their steps:
+- a passed verdict with a failed step or check, outside a VM, or with nothing but
+  invalid actions;
+- a failed verdict without reasons;
+- a step failure on a step that never ran, or on a step that does not exist;
+- an executed step whose observation reports a failure the outcome does not record.
+
+It reports how many valid records succeeded and how many failed. A step the human
+declined is not a contradiction in itself: whether declining was right is for the
+verdict and the checks to say.
 
 Dry runs and replays in a planner prove only that a plan was made. A repair is
 validated only by running it in a disposable VM and checking the resulting state.
@@ -135,9 +145,12 @@ Next it runs the reference solution, whose required steps must all exit with one
 of their success codes, and the checks again, which must all pass. For
 an observe task it checks for the expected output instead; for a refuse task the
 Guardian must deny the intent and nothing runs. It writes a console log per task,
-`results.json`, and one reference trajectory for every task that ran, whatever its
-verdict, sanitized and checked with `core-ctl trajectory`. A task whose VM, login or
-fixture failed produced no episode and has no trajectory; `results.json` lists it.
+`results.json`, and one reference trajectory for every episode that started (once the
+fixture is in place), whatever its verdict, sanitized and checked with `core-ctl
+trajectory`. A step that hangs or cannot be replayed is a recorded failure; after a
+hang the episode ends and its checks are recorded as not passed. A task whose VM,
+login, fixture or first state check failed produced no episode and has no
+trajectory; `results.json` lists it.
 
 Until the Guardian is packaged on the image (phase 2), the reference solution is
 executed as the exact command lines the Guardian plans for it on the host
