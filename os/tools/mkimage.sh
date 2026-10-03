@@ -1,11 +1,17 @@
 #!/bin/bash
 # Assemble a bootable C.O.R.E. OS disk image from packages alone.
 #
-#   mkimage.sh --repo DIR --key PUBKEY --out IMAGE [--size 4G] [--password PW]
+#   mkimage.sh --repo DIR --key PUBKEY --out IMAGE [--size 4G] [--password PW] [--user NAME]
 #
 # Every file of the system comes from a .cpk installed with cpkg into an empty
 # root; this script adds only what is specific to one machine image: the trusted
-# repository key, the root password and the boot loader.
+# repository key, the root password, an optional interactive user and the boot
+# loader.
+#
+# --user NAME creates the person who talks to C.O.R.E.: a member of the "core"
+# group (which may use the Guardian socket; it comes from the core-os package), with
+# core-shell as login shell, logged in automatically on tty1. Its password is the
+# --password one and must be changed at first login, like root's.
 #
 # Disk layout (GPT):
 #   1  BIOS boot      1 MiB   GRUB core image for legacy BIOS
@@ -17,7 +23,7 @@ set -euo pipefail
 
 SIZE=4G
 PASSWORD=core
-REPO='' KEY='' OUT=''
+REPO='' KEY='' OUT='' USERNAME=''
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) REPO=$2; shift 2 ;;
@@ -25,6 +31,7 @@ while [ $# -gt 0 ]; do
     --out) OUT=$2; shift 2 ;;
     --size) SIZE=$2; shift 2 ;;
     --password) PASSWORD=$2; shift 2 ;;
+    --user) USERNAME=$2; shift 2 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -76,6 +83,18 @@ chroot "$R" /usr/bin/systemctl enable systemd-networkd.service systemd-resolved.
 echo "root:$PASSWORD" | chroot "$R" /usr/bin/chpasswd
 # The password must be changed at first login.
 chroot "$R" /usr/bin/chage -d 0 root
+if [ -n "$USERNAME" ]; then
+  chroot "$R" /usr/bin/getent group core >/dev/null || { echo "--user needs the core-os package (group core)" >&2; exit 1; }
+  grep -qx /usr/bin/core-shell "$R/etc/shells" 2>/dev/null || echo /usr/bin/core-shell >> "$R/etc/shells"
+  chroot "$R" /usr/bin/useradd --create-home --user-group --groups core --shell /usr/bin/core-shell "$USERNAME"
+  echo "$USERNAME:$PASSWORD" | chroot "$R" /usr/bin/chpasswd
+  chroot "$R" /usr/bin/chage -d 0 "$USERNAME"
+  dropin="$R/etc/systemd/system/getty@tty1.service.d"
+  mkdir -p "$dropin"
+  sed "s/--autologin core /--autologin $USERNAME /" \
+    "$here/../../system/etc/systemd/system/getty@tty1.service.d/autologin.conf" > "$dropin/autologin.conf"
+  grep -q -- "--autologin $USERNAME " "$dropin/autologin.conf"
+fi
 
 step "Partitioning"
 truncate -s "$SIZE" "$OUT.tmp"
