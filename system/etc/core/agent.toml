@@ -4,8 +4,11 @@
 [inference]
 # llama  = local model served by core-inference.service (llama.cpp)
 # rescue = rule-based planner, no model (also used automatically as a fallback)
-backend = "llama"
+# script = intents replayed from `script` (testing only)
+# Rescue until a model package is installed; then switch to llama.
+backend = "rescue"
 url = "http://127.0.0.1:8080"
+# script = "/path/to/intents.jsonl"
 temperature = 0.2
 max_tokens = 384
 # Must match CORE_CTX_SIZE in /etc/core/inference.env.

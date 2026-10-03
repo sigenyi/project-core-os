@@ -111,8 +111,10 @@ by `Debug` and redacted in confirmations, reports and the audit log.
   contain injected instructions; layers 1-4 bound what such content can achieve.
   Channels that could carry data out (package installs, Wi-Fi changes, URLs,
   unusual hostnames) need confirmation. Plain pings to ordinary hostnames do not.
-* The live ISO logs `core` in automatically, without a password. Installed systems
-  should remove the autologin drop-in or set a password.
+* Users log in with a password; no autologin is configured. `mkimage.sh --user`
+  creates the account with the image's password, expired so that it must be
+  changed at first login. Anyone who knows the initial password before that
+  first login can still use the account.
 * The rescue planner matches keywords. It goes through exactly the same validation,
   policy and confirmation path as the model.
 

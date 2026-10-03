@@ -150,10 +150,11 @@ def main(argv):
             out(step="approve on the old connection", response=old)
             out(step="approve on a new connection", response=summary(Conn().confirm(r.get("token"), True)))
         elif cmd == "flood":
-            c = Conn()
+            # Two connections taking turns: the limit is per user, not per connection.
+            conns = [Conn(), Conn()]
             kinds = {}
-            for _ in range(int(argv[3])):
-                s = summary(c.execute(argv[1], json.loads(argv[2])))
+            for i in range(int(argv[3])):
+                s = summary(conns[i % 2].execute(argv[1], json.loads(argv[2])))
                 key = s.get("kind") or s.get("type")
                 kinds[key] = kinds.get(key, 0) + 1
             out(step="flood", counts=kinds)
@@ -161,6 +162,7 @@ def main(argv):
             c = Conn()
             c.s.sendall(struct.pack(">I", (1 << 20) + 1) + b"{")
             out(step="oversized frame", response=summary(c.recv()))
+            out(step="after the refusal", response=summary(c.recv()))
         else:
             out(error=f"unknown command {cmd}")
             return 2

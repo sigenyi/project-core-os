@@ -1,7 +1,7 @@
 [package]
 name = "core-os"
 version = "0.1.0"
-release = 1
+release = 2
 summary = "C.O.R.E. services: the Guardian, the conversational shell, telemetry and core-ctl"
 license = "GPL-3.0-or-later"
 homepage = "https://github.com/sigenyi/project-core-os"
@@ -9,12 +9,14 @@ homepage = "https://github.com/sigenyi/project-core-os"
 [build]
 # Built from this repository on the build host (`cargo build --release -p core-guardian
 # -p core-shell -p core-ctl -p core-sense`) until the Rust toolchain itself is part
-# of the system, like cpkg. Bump `release` whenever the contents change (D12).
+# of the system, like cpkg. Bump `release` whenever the contents change (D12):
+# nothing checks that for you, because the binaries come from target/release.
+# Release 2: complete runtime dependencies, rescue as the default backend, no
+# preset for the model service.
 #
 # Not packaged here: the model and speech services (core-inference, core-whisper and
 # their configuration) ship with a model package once one exists (docs/TRAINING.md,
-# D8), and the tty1 autologin belongs to an image with an interactive user
-# (os/tools/mkimage.sh --user).
+# D8). There is no autologin: users log in with a password (mkimage.sh --user).
 files = [
   "../../target/release/core-guardian",
   "../../target/release/core-shell",
@@ -22,7 +24,7 @@ files = [
   "../../target/release/core-sensed",
   "../../system",
 ]
-after = ["systemd", "cpkg", "iproute2"]
+after = ["systemd", "cpkg", "iproute2", "procps-ng", "util-linux", "kmod", "inetutils", "coreutils"]
 script = '''
 for b in core-guardian core-shell core-ctl core-sensed; do
   install -Dm755 "$b" "$DESTDIR/usr/bin/$b"
@@ -39,9 +41,9 @@ install -Dm644 system/etc/core/agent.toml "$DESTDIR/etc/core/agent.toml"
 '''
 
 [runtime]
-# Programs the Guardian runs on this system's default backends (cpkg, systemd,
-# networkd); shared libraries are found from the binaries themselves.
-depends = ["systemd", "cpkg", "iproute2"]
+# Packages holding the programs the Guardian runs on this system's default backends
+# (cpkg, systemd, networkd); shared libraries are found from the binaries themselves.
+depends = ["systemd", "cpkg", "iproute2", "procps-ng", "util-linux", "kmod", "inetutils", "coreutils"]
 
 [ai]
 kind = "cli"

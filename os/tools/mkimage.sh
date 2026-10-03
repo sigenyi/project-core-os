@@ -89,7 +89,7 @@ if [ -n "$USERNAME" ]; then
   # A user named like the group ("core") gets it as primary group; others get their own.
   if [ "$USERNAME" = core ]; then group=(--gid core); else group=(--user-group --groups core); fi
   chroot "$R" /usr/bin/useradd --create-home "${group[@]}" --shell /usr/bin/core-shell "$USERNAME"
-  chroot "$R" /usr/bin/id -nG "$USERNAME" | grep -qw core
+  chroot "$R" /usr/bin/id -nG "$USERNAME" | tr ' ' '\n' | grep -qx core
   echo "$USERNAME:$PASSWORD" | chroot "$R" /usr/bin/chpasswd
   chroot "$R" /usr/bin/chage -d 0 "$USERNAME"
 fi

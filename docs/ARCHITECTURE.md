@@ -160,9 +160,9 @@ which is what `core-shell --dev` uses on development machines.
 firmware → GRUB → kernel (root drivers built in, no initramfs) → systemd
    ├─ core-guardian.socket   (root-owned socket, group core, 0660)
    ├─ core-sensed.service    (telemetry)
-   ├─ core-inference.service (llama-server, loopback only)
+   ├─ core-inference.service (llama-server, loopback only; once a model package exists)
    ├─ systemd-networkd / systemd-resolved
-   └─ getty@tty1 → autologin core → /usr/bin/core-shell
+   └─ getty → login (password) → /usr/bin/core-shell (the user's login shell)
 ```
 
 The kernel's console log level is lowered (`kernel.printk = 3 4 1 3`) so driver

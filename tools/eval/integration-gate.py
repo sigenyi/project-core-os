@@ -58,8 +58,12 @@ SCRIPTS = {
     "start-timesyncd": [{"action": "start_service", "args": {"service": "systemd-timesyncd"}}, RESPOND],
     "remove-glibc": [{"action": "remove_package", "args": {"package": "glibc"}}, RESPOND],
     "start-missing": [{"action": "start_service", "args": {"service": "no-such-unit-gate"}}, RESPOND],
-    "read-shadow": [{"action": "read_file", "args": {"path": "/etc/shadow"}}, RESPOND],
-    "invalid-package": [{"action": "install_package", "args": {"package": "-rf"}}, RESPOND],
+    # Each refused intent is followed by a harmless one, so the audit log proves the
+    # script ran on past it (and that the refused intent itself never got there).
+    "read-shadow": [{"action": "read_file", "args": {"path": "/etc/shadow"}},
+                    {"action": "disk_usage", "args": {}}, RESPOND],
+    "invalid-package": [{"action": "install_package", "args": {"package": "-rf"}},
+                        {"action": "disk_usage", "args": {}}, RESPOND],
     "timezone-berlin": [{"action": "set_timezone", "args": {"timezone": "Europe/Berlin"}}, RESPOND],
 }
 
@@ -187,8 +191,8 @@ def run_gate(a, gate):
     g.sh(f"mkdir -p {MNT} && mount -o ro /dev/vdb {MNT}")
     g.sh(f"printf '[[repo]]\\nlocation = \"{MNT}/repo\"\\n' >> /etc/cpkg/repos.toml")
     fp_image = g.value("core-ctl contract | sed -n 's/^fingerprint: *//p'")
-    g.check("image", "the image's contract fingerprint is the one this commit builds", fp_image == fp_host,
-            image=fp_image, host=fp_host)
+    g.check("image", "the image's contract fingerprint matches core-ctl built from this checkout",
+            fp_image == fp_host, image=fp_image, host=fp_host, head=a.head)
     g.check("image", "core-os is installed and intact",
             g.sh("cpkg verify core-os")[1] == 0, info=g.value("cpkg info core-os | head -3"))
     g.check("image", "core-guardian.socket is enabled and listening",
@@ -203,8 +207,8 @@ def run_gate(a, gate):
     ids = g.value(f"id -nG {USER}")
     uid = int(g.value(f"id -u {USER}"))
     g.check("image", f"{USER} is a non-root member of core", "core" in ids.split() and uid != 0, groups=ids, uid=uid)
-    g.check("image", "no autologin is configured",
-            g.sh("! grep -rqs -- --autologin /etc/systemd/system /usr/lib/systemd/system/getty@.service.d")[1] == 0)
+    g.check("image", "no autologin is configured anywhere systemd reads units from",
+            g.sh("! grep -rqs -- --autologin /etc/systemd /usr/lib/systemd /run/systemd")[1] == 0)
     g.sh(f"useradd --create-home {INTRUDER}")
     ids = g.value(f"id -nG {INTRUDER}")
     g.check("image", f"{INTRUDER} (test fixture) is not in core", "core" not in ids.split(), groups=ids)
@@ -266,16 +270,23 @@ def run_gate(a, gate):
             decisions=decisions(au), reason=au[-1].get("reason") if au else None)
 
     out, rc, au = shell("start-missing", "Start the gate service.", "")
+    codes = [s.get("exit") for s in (au[-1].get("steps", []) if au else [])]
     g.check("agent", "a failing action is reported as failed, with its exit code, in the audit log",
-            decisions(au) == ["allowed"] and au[-1].get("success") is False, entries=au, output=out[-600:])
+            decisions(au) == ["allowed"] and au[-1].get("success") is False and any(c not in (0, None) for c in codes),
+            exit_codes=codes, entries=au, output=out[-600:])
 
     out, rc, au = shell("read-shadow", "Show /etc/shadow.", "")
-    g.check("agent", "the agent refuses to read /etc/shadow for the model (and never asks the Guardian)",
-            not re.search(r"root:[^:\s]*\$", out) and au == [], output=out[-600:])
+    g.check("agent", "the agent refuses to read /etc/shadow for the model, says so, never asks the Guardian, "
+            "and carries on",
+            rc == 0 and "off limits" in out and not re.search(r"root:[^:\s]*\$", out)
+            and [(e.get("action"), e.get("decision")) for e in au] == [("disk_usage", "allowed")],
+            rc=rc, entries=au, output=out[-600:])
 
     out, rc, au = shell("invalid-package", "Install -rf.", "y\n")
-    g.check("agent", "an invalid intent is rejected by the agent before it reaches the Guardian",
-            au == [] and "risk]" not in out, output=out[-600:])
+    g.check("agent", "an invalid intent is rejected by the agent before it reaches the Guardian; the next one runs",
+            rc == 0 and "risk]" not in out
+            and [(e.get("action"), e.get("decision")) for e in au] == [("disk_usage", "allowed")],
+            rc=rc, entries=au, output=out[-600:])
 
     out, rc, au = shell(None, "network", None, backend="rescue")
     g.check("agent", "rescue planner: 'network' runs network_status (read-only, no question)",
@@ -322,12 +333,13 @@ def run_gate(a, gate):
     g.check("protocol", "the denial does not depend on the agent", response_of(rows, "execute").get("kind") == "denied",
             rows=rows)
     rows, _ = g.client(USER, "oversized")
-    r = response_of(rows, "oversized frame")
     g.check("protocol", "an oversized frame is refused and the connection closed",
-            r.get("type") in ("error", "closed"), rows=rows)
+            response_of(rows, "oversized frame").get("type") == "error"
+            and response_of(rows, "after the refusal").get("type") == "closed", rows=rows)
     au = g.audit_since(n)
     g.check("protocol", "the protocol checks left the matching audit entries",
-            {"confirmation_required", "confirmed", "declined", "confirmation_expired", "denied"} <= set(decisions(au)),
+            {"confirmation_required", "confirmed", "declined", "confirmation_expired", "denied", "invalid"}
+            <= set(decisions(au)),
             decisions=decisions(au))
 
     # ---- who may connect ----------------------------------------------------------
@@ -356,9 +368,16 @@ def run_gate(a, gate):
     g.sh("systemctl restart core-guardian.service")
     g.check("recovery", "after a service restart the next request works", pong())
     pid = g.value("systemctl show -p MainPID --value core-guardian.service")
-    g.sh(f"kill -9 {pid}; sleep 4")
-    g.check("recovery", "after the Guardian is killed it comes back (Restart=on-failure, socket activation)",
-            pong() and g.value("systemctl show -p MainPID --value core-guardian.service") not in ("0", pid), killed=pid)
+    restarts = g.value("systemctl show -p NRestarts --value core-guardian.service")
+    if pid.isdigit() and int(pid) > 1:
+        g.sh(f"kill -9 {pid}; sleep 5")
+    # Read systemd's view before any request, which would socket-activate it anyway.
+    after_pid = g.value("systemctl show -p MainPID --value core-guardian.service")
+    after_restarts = g.value("systemctl show -p NRestarts --value core-guardian.service")
+    g.check("recovery", "a killed Guardian is restarted by systemd (Restart=on-failure), then answers",
+            pid.isdigit() and int(pid) > 1 and after_pid not in ("0", pid) and after_restarts.isdigit()
+            and restarts.isdigit() and int(after_restarts) == int(restarts) + 1 and pong(),
+            killed=pid, new_pid=after_pid, restarts=[restarts, after_restarts])
     g.sh("systemctl stop core-guardian.service")
     stopped = g.value("systemctl is-active core-guardian.service")
     g.check("recovery", "a stopped Guardian is started again by its socket on the next request",
@@ -375,9 +394,11 @@ def run_gate(a, gate):
     g.sh("systemctl restart core-guardian.service; touch /tmp/gate-go")
     g.sh("for i in $(seq 1 100); do grep -q 'new connection' /tmp/gate-hold.out 2>/dev/null && break; sleep 0.2; done")
     rows = [json.loads(line) for line in g.value("cat /tmp/gate-hold.out").splitlines() if line.startswith("{")]
-    g.check("recovery", "a confirmation pending across a restart is gone: nothing runs",
-            response_of(rows, "approve on a new connection").get("kind") == "expired" and g.timezone() == "Europe/Paris",
-            rows=rows, timezone=g.timezone())
+    old = response_of(rows, "approve on the old connection").get("type")
+    g.check("recovery", "a restart cuts the connection holding a pending confirmation, and nothing runs",
+            old in ("closed", "connection error")
+            and response_of(rows, "approve on a new connection").get("kind") == "expired"
+            and g.timezone() == "Europe/Paris", rows=rows, timezone=g.timezone())
     g.sh(f"chmod 664 {GUARDIAN_CONFIG}; systemctl restart core-guardian.service; sleep 1")
     refused = not pong()
     log = g.value("journalctl -u core-guardian -n 20 --no-pager -o cat")
@@ -399,12 +420,12 @@ def run_gate(a, gate):
     g.check("audit", "every audit entry names the action contract", audit and not bad,
             entries=len(audit), without_contract=len(bad))
     peers = sorted({e["peer"]["uid"] for e in audit if "peer" in e})
-    g.check("audit", "audit entries come only from the user (and root); the refused peer has none",
+    g.check("audit", "audit entries come from the user; a refused peer is cut off before any request is read",
             intruder_uid not in peers and uid in peers, peer_uids=peers)
     kinds = sorted(set(decisions(audit)))
     g.check("audit", "the audit log records every kind of decision the gate made",
             {"allowed", "confirmation_required", "confirmed", "declined", "denied", "confirmation_expired",
-             "rate_limited"} <= set(kinds), decisions=kinds)
+             "rate_limited", "invalid"} <= set(kinds), decisions=kinds)
     return uid
 
 
@@ -450,6 +471,7 @@ def availability(g, catalog):
             row["failure"] = r.get("failure")
             row["status"] = "works" if r.get("success") else "fails on this image"
         table.append(row)
+    g.audit = g.audit_since(0)  # the whole log, including the availability runs
     return table
 
 
@@ -479,6 +501,7 @@ def main():
 
     os.makedirs(a.out, exist_ok=True)
     info = subprocess.run([a.core_ctl, "contract"], capture_output=True, text=True, check=True).stdout
+    a.head = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
     a.contract = re.search(r"^fingerprint:\s*(sha256:[0-9a-f]{64})$", info, re.M).group(1)
     catalog = json.loads(subprocess.run([a.core_ctl, "catalog", "--json"], capture_output=True, text=True,
                                         check=True).stdout)
@@ -515,6 +538,7 @@ def main():
         "image_sha256": image_sha,
         "image_unchanged": vmrun.sha256_file(a.image) == image_sha,
         "contract": a.contract,
+        "head": a.head,
         "accel": "kvm" if os.access("/dev/kvm", os.W_OK) else "tcg",
         "checks_passed": passed,
         "checks_total": len(g.checks),
