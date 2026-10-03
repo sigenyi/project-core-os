@@ -117,36 +117,70 @@ pub struct Trajectory {
 }
 
 /// Redact secrets and identifying data in place. Idempotent.
+///
+/// Run it on the raw episode, while secret arguments still hold their values: a
+/// value that was redacted earlier (in an audit log, say) cannot be found where the
+/// user or a program echoed it, and no validator can tell it is there.
 pub fn sanitize(t: &mut Trajectory) {
     // Collect secret values first, so they are scrubbed wherever they were echoed.
     let mut secrets: Vec<String> = Vec::new();
     for step in &mut t.steps {
-        let Some(spec) = catalog::find(&step.intent.action) else { continue };
-        for p in spec.params.iter().filter(|p| p.kind.is_secret()) {
-            if let Some(v) = step.intent.args.get_mut(p.name) {
-                if let Some(s) = v.as_str() {
-                    if s != REDACTED && !s.is_empty() {
-                        secrets.push(s.to_string());
-                    }
-                }
-                *v = serde_json::Value::String(REDACTED.into());
+        let spec = catalog::find(&step.intent.action);
+        for (name, v) in step.intent.args.iter_mut() {
+            let secret = match spec {
+                Some(spec) => spec.param(name).is_some_and(|p| p.kind.is_secret()),
+                // Not a catalog action (recorded as invalid): judge by the name.
+                None => looks_secret(name),
+            };
+            if !secret {
+                continue;
             }
+            if let Some(s) = v.as_str() {
+                if s != REDACTED && !s.is_empty() {
+                    secrets.push(s.to_string());
+                }
+            }
+            *v = serde_json::Value::String(REDACTED.into());
         }
     }
-    let clean = |text: &str| -> String {
+    // Longest first, so a secret that contains another is replaced whole.
+    secrets.sort_by_key(|s| std::cmp::Reverse(s.len()));
+    let unsecret = |text: &str| -> String {
         let mut out = text.to_string();
         for s in &secrets {
             out = out.replace(s.as_str(), REDACTED);
         }
-        scrub_identifiers(&out)
+        out
     };
+    let clean = |text: &str| scrub_identifiers(&unsecret(text));
     t.request = clean(&t.request);
     for step in &mut t.steps {
         step.observation = clean(&step.observation);
         if let Some(thought) = &step.intent.thought {
             step.intent.thought = Some(clean(thought));
         }
+        // Arguments are scrubbed too. Free text gets placeholders; typed values
+        // (a host to ping, a path) get documentation values of the same type, so
+        // the intent still validates.
+        let spec = catalog::find(&step.intent.action);
+        for (name, v) in step.intent.args.iter_mut() {
+            let Some(text) = v.as_str() else { continue };
+            if text == REDACTED {
+                continue;
+            }
+            let free_text = match spec.and_then(|spec| spec.param(name)) {
+                Some(p) => matches!(p.kind, catalog::ParamKind::Text { .. }),
+                None => true,
+            };
+            let cleaned = if free_text { clean(text) } else { scrub_with(&unsecret(text), Style::DocumentationValues) };
+            *v = serde_json::Value::String(cleaned);
+        }
     }
+}
+
+fn looks_secret(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    ["pass", "psk", "secret", "token", "key", "credential"].iter().any(|w| n.contains(w))
 }
 
 /// Everything wrong with a record for a dataset pinned to `contract`. Empty means
@@ -190,59 +224,106 @@ pub fn validate(t: &Trajectory, contract: &str) -> Vec<String> {
 }
 
 /// Replace MAC addresses, non-loopback IP addresses and user names in home
-/// directories with placeholders.
+/// directories with placeholders (`<mac>`, `<ip>`, `/home/<user>`).
+///
+/// A four-part version number (6.10.5.1) cannot be told from an IPv4 address and
+/// is replaced too: scrubbing errs on the side of removing data.
 pub fn scrub_identifiers(text: &str) -> String {
+    scrub_with(text, Style::Placeholders)
+}
+
+/// What identifying values are replaced with.
+#[derive(Clone, Copy, PartialEq)]
+enum Style {
+    /// `<mac>`, `<ip>`, `<user>`: for text.
+    Placeholders,
+    /// Reserved documentation values that still parse (02:00:00:00:00:01,
+    /// 192.0.2.1, 2001:db8::1, user): for typed arguments.
+    DocumentationValues,
+}
+
+const DOC_MAC: &str = "02:00:00:00:00:01";
+const DOC_IPV4: &str = "192.0.2.1";
+const DOC_IPV6: &str = "2001:db8::1";
+
+fn scrub_with(text: &str, style: Style) -> String {
     let mut out = String::with_capacity(text.len());
     let mut token = String::new();
-    let flush = |token: &mut String, out: &mut String| {
-        out.push_str(&scrub_token(token));
-        token.clear();
-    };
     for c in text.chars() {
         if c.is_ascii_alphanumeric() || matches!(c, ':' | '.' | '/' | '_' | '-' | '%') {
             token.push(c);
         } else {
-            flush(&mut token, &mut out);
+            out.push_str(&scrub_token(&token, style));
+            token.clear();
             out.push(c);
         }
     }
-    flush(&mut token, &mut out);
+    out.push_str(&scrub_token(&token, style));
     out
 }
 
-fn scrub_token(token: &str) -> String {
+/// A token is scrubbed segment by segment between slashes, so addresses inside URLs
+/// (http://192.168.1.7/x) and with prefix lengths (10.0.2.15/24) are found.
+fn scrub_token(token: &str, style: Style) -> String {
     if token.is_empty() {
         return String::new();
     }
-    // A token may carry a prefix length or port: 192.168.1.5/24, fe80::1%eth0.
-    let (core, rest) = match token.find(['/', '%']) {
-        Some(i) if !token.starts_with('/') => token.split_at(i),
-        _ => (token, ""),
-    };
-    let core_trimmed = core.trim_end_matches(['.', ':']);
-    let trailing = &core[core_trimmed.len()..];
-    if is_mac(core_trimmed) {
-        return format!("<mac>{trailing}{rest}");
-    }
-    if let Some(ip) = parse_ipv4(core_trimmed) {
-        if ip[0] != 127 && ip != [0, 0, 0, 0] {
-            return format!("<ip>{trailing}{rest}");
-        }
-    }
-    if is_ipv6(core_trimmed) && core_trimmed != "::1" && core_trimmed != "::" {
-        return format!("<ip>{trailing}{rest}");
-    }
-    scrub_home(token)
+    let joined: Vec<String> = token.split('/').map(|seg| scrub_segment(seg, style)).collect();
+    scrub_home(&joined.join("/"), style)
 }
 
-fn scrub_home(token: &str) -> String {
+fn scrub_segment(seg: &str, style: Style) -> String {
+    // A zone index follows a link-local address: fe80::1%eth0.
+    let (core, zone) = match seg.find('%') {
+        Some(i) => seg.split_at(i),
+        None => (seg, ""),
+    };
+    let trimmed = core.trim_end_matches(['.', ':']);
+    let trailing = &core[trimmed.len()..];
+    let (mac, v4, v6) = match style {
+        Style::Placeholders => ("<mac>", "<ip>", "<ip>"),
+        Style::DocumentationValues => (DOC_MAC, DOC_IPV4, DOC_IPV6),
+    };
+    let replaced = if is_mac(trimmed) && trimmed != DOC_MAC {
+        Some(mac.to_string())
+    } else if parse_ipv4(trimmed).is_some_and(identifying_ipv4) {
+        Some(v4.to_string())
+    } else if let Some((addr, port)) = trimmed.rsplit_once(':').filter(|(a, p)| {
+        // An IPv4 address with a port: 192.168.1.5:22.
+        !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()) && parse_ipv4(a).is_some()
+    }) {
+        parse_ipv4(addr).is_some_and(identifying_ipv4).then(|| format!("{v4}:{port}"))
+    } else if is_ipv6(trimmed) && identifying_ipv6(trimmed) {
+        Some(v6.to_string())
+    } else {
+        None
+    };
+    match replaced {
+        Some(r) => format!("{r}{trailing}{zone}"),
+        None => seg.to_string(),
+    }
+}
+
+fn identifying_ipv4(ip: [u8; 4]) -> bool {
+    ip[0] != 127 && ip != [0, 0, 0, 0] && !(ip[0] == 192 && ip[1] == 0 && ip[2] == 2)
+}
+
+fn identifying_ipv6(s: &str) -> bool {
+    !matches!(s, "::1" | "::") && !s.to_ascii_lowercase().starts_with("2001:db8:")
+}
+
+fn scrub_home(token: &str, style: Style) -> String {
     let Some(i) = token.find("/home/") else { return token.to_string() };
     let after = &token[i + 6..];
     let end = after.find('/').unwrap_or(after.len());
-    if end == 0 || &after[..end] == "<user>" {
+    let user = match style {
+        Style::Placeholders => "<user>",
+        Style::DocumentationValues => "user",
+    };
+    if end == 0 || &after[..end] == user {
         return token.to_string();
     }
-    format!("{}/home/<user>{}", &token[..i], &after[end..])
+    format!("{}/home/{user}{}", &token[..i], &after[end..])
 }
 
 fn is_mac(s: &str) -> bool {
@@ -265,8 +346,12 @@ fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
     Some(ip)
 }
 
-/// IPv6 addresses, without confusing them with times (12:34:56) or MACs.
+/// IPv6 addresses, including IPv4-mapped ones (::ffff:10.1.2.3), without confusing
+/// them with times (12:34:56) or MACs.
 fn is_ipv6(s: &str) -> bool {
+    if let Some((head, v4)) = s.rsplit_once(':').filter(|(_, v4)| v4.contains('.')) {
+        return parse_ipv4(v4).is_some() && is_ipv6(&format!("{head}:0"));
+    }
     let colons = s.matches(':').count();
     if colons < 2 || !s.bytes().all(|b| b.is_ascii_hexdigit() || b == b':') {
         return false;
@@ -357,6 +442,51 @@ mod tests {
              lo 127.0.0.1 ::1 at 12:34:56 on 2026-10-03, file /home/<user>/notes.txt, v1.2.3 size 1.5"
         );
         assert_eq!(scrub_identifiers(&s), s, "idempotent");
+    }
+
+    #[test]
+    fn addresses_in_urls_with_ports_and_mapped_forms_are_scrubbed() {
+        let text = "GET http://192.168.1.7/index.html from 192.168.1.5:22 dns 10.0.0.1:53 \
+                    mapped ::ffff:10.1.2.3 local 127.0.0.1:631 doc 192.0.2.1";
+        let s = scrub_identifiers(text);
+        assert_eq!(
+            s,
+            "GET http://<ip>/index.html from <ip>:22 dns <ip>:53 mapped <ip> local 127.0.0.1:631 doc 192.0.2.1"
+        );
+        assert_eq!(scrub_identifiers(&s), s, "idempotent");
+        // Known and accepted: a four-part version looks like an address.
+        assert_eq!(scrub_identifiers("linux 6.10.5.1"), "linux <ip>");
+        assert_eq!(scrub_identifiers("bc 1.07.1, bash 5.3"), "bc 1.07.1, bash 5.3");
+    }
+
+    #[test]
+    fn arguments_are_scrubbed_and_still_validate() {
+        let mut t = record();
+        t.steps[0].intent = Intent::new("ping_host", json!({"host": "192.168.1.9"}));
+        t.steps[1].intent = Intent::new("respond", json!({"message": "192.168.1.9 at 52:54:00:12:34:56 answers"}));
+        assert!(validate(&t, crate::contract::fingerprint()).iter().any(|p| p.contains("not sanitized")));
+        sanitize(&mut t);
+        assert_eq!(t.steps[0].intent.args["host"], DOC_IPV4);
+        assert_eq!(t.steps[1].intent.args["message"], "<ip> at <mac> answers");
+        assert_eq!(validate(&t, crate::contract::fingerprint()), Vec::<String>::new());
+        // A typed path keeps its shape too.
+        let mut t = record();
+        t.steps[0].intent = Intent::new("list_directory", json!({"path": "/home/joel/notes"}));
+        sanitize(&mut t);
+        assert_eq!(t.steps[0].intent.args["path"], "/home/user/notes");
+        assert_eq!(validate(&t, crate::contract::fingerprint()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn secrets_in_unknown_actions_are_redacted_by_name() {
+        let mut t = record();
+        t.request = "join Home, the password is hunter2222".into();
+        t.steps[0].intent = Intent::new("join_wifi", json!({"network": "Home", "password": "hunter2222"}));
+        t.steps[0].disposition = Disposition::Invalid;
+        sanitize(&mut t);
+        let line = serde_json::to_string(&t).unwrap();
+        assert!(!line.contains("hunter2222"), "{line}");
+        assert_eq!(t.steps[0].intent.args["network"], "Home");
     }
 
     #[test]
