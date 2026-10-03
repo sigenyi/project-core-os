@@ -138,10 +138,13 @@ pub fn sanitize(t: &mut Trajectory) {
             // The argument is always redacted. Its value is scrubbed from text only
             // when it is long enough to be a real secret (catalog secrets have at
             // least 8 characters): a model's "y" must not be cut out of every word.
-            if let Some(s) = v.as_str() {
-                if s != REDACTED && s.chars().count() >= MIN_ECHOED_SECRET {
-                    secrets.push(s.to_string());
-                }
+            let value = match v {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                _ => String::new(),
+            };
+            if value != REDACTED && value.chars().count() >= MIN_ECHOED_SECRET {
+                secrets.push(value);
             }
             *v = serde_json::Value::String(REDACTED.into());
         }
@@ -192,24 +195,32 @@ fn scrub_value(v: &mut serde_json::Value, scrub: &dyn Fn(&str) -> String) {
     }
 }
 
-/// Whether an argument of a non-catalog action holds a secret, judged by the words
-/// of its name (`wifi_password`, `api-key`; not `keyboard` or `monkey`).
+/// Whether an argument of a non-catalog action holds a secret, judged by the name:
+/// long secret words anywhere (`wifiPassword`, `api_token`), short ones only as a
+/// whole word (`key`, `api-key`, `apiKey`; not `keyboard` or `monkey`).
 fn looks_secret(name: &str) -> bool {
-    const WORDS: &[&str] = &[
-        "pass",
-        "password",
-        "passphrase",
-        "passwd",
-        "psk",
-        "secret",
-        "token",
-        "key",
-        "apikey",
-        "credential",
-        "credentials",
-        "pin",
-    ];
-    name.to_ascii_lowercase().split(|c: char| !c.is_ascii_alphanumeric()).any(|w| WORDS.contains(&w))
+    const ANYWHERE: &[&str] = &["password", "passphrase", "passwd", "secret", "token", "credential"];
+    const WHOLE_WORD: &[&str] = &["pass", "psk", "key", "apikey", "pin"];
+    let lower = name.to_ascii_lowercase();
+    if ANYWHERE.iter().any(|w| lower.contains(w)) {
+        return true;
+    }
+    // Words split at punctuation and at camelCase humps.
+    let mut words = vec![String::new()];
+    let mut prev_lower = false;
+    for c in name.chars() {
+        if !c.is_ascii_alphanumeric() {
+            words.push(String::new());
+            prev_lower = false;
+            continue;
+        }
+        if c.is_ascii_uppercase() && prev_lower {
+            words.push(String::new());
+        }
+        prev_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
+        words.last_mut().unwrap().push(c.to_ascii_lowercase());
+    }
+    words.iter().any(|w| WHOLE_WORD.contains(&w.as_str()))
 }
 
 /// Everything wrong with a record for a dataset pinned to `contract`. Empty means
@@ -530,6 +541,25 @@ mod tests {
         assert_eq!(t.steps[0].intent.args["key"], REDACTED, "the argument itself is still redacted");
         assert_eq!(t.steps[0].intent.args["keyboard_layout"], "us");
         assert_eq!(t.steps[0].intent.args["monkey"], "a");
+    }
+
+    #[test]
+    fn secret_names_are_recognised_in_any_spelling() {
+        for name in ["password", "wifiPassword", "wifi_password", "api_token", "apiKey", "api-key", "key", "pin"] {
+            assert!(looks_secret(name), "{name}");
+        }
+        for name in ["keyboard_layout", "monkey", "keyboard", "spinner", "passage_count", "network"] {
+            assert!(!looks_secret(name), "{name}");
+        }
+        // A numeric secret is scrubbed from text too.
+        let mut t = record();
+        t.request = "my pin is 12345678".into();
+        t.steps[0].intent = Intent::new("unlock", json!({"pin": 12345678, "wifiPassword": "hunter2222"}));
+        t.steps[0].disposition = Disposition::Invalid;
+        t.steps[0].observation = "hunter2222 accepted".into();
+        sanitize(&mut t);
+        let line = serde_json::to_string(&t).unwrap();
+        assert!(!line.contains("12345678") && !line.contains("hunter2222"), "{line}");
     }
 
     #[test]
