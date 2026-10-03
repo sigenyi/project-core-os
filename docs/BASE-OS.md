@@ -311,7 +311,9 @@ The base image above has no C.O.R.E. services. The `core-os` package
 - `/var/log/core` (tmpfiles);
 - the default `guardian.toml` and `agent.toml`.
 
-The model and speech services wait for a model package (TRAINING.md, D8).
+The model and speech services wait for a model package (TRAINING.md, D8). Until
+then `agent.toml` uses the rescue planner, and the preset enables nothing that is
+not installed.
 
 To build it without touching the base system's work directory, copy the work
 directory, build `core-os` there and sign that repository. Then make the image
