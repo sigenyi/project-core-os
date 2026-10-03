@@ -212,7 +212,8 @@ def undiscriminating(task, before):
     return [c["name"] for c in before if c["passed"]] if task["kind"] == "repair" else []
 
 
-def run_task(task, a, bt, repo_disk, split):
+def run_task(task, a, bt, repo_disk, split, make_vm=VM, planner=plan):
+    """Run one task. `make_vm` and `planner` are replaceable for the self-test."""
     log = os.path.join(a.out, f"{task['id']}.console.log")
     vm = None
     t0 = time.time()
@@ -228,8 +229,8 @@ def run_task(task, a, bt, repo_disk, split):
         return [{"name": c["name"], "passed": sh(c["command"], "check")[1] == 0} for c in task.get("check", [])]
 
     try:
-        vm = VM(bt, a.image, log, repo_disk if task.get("fixture", {}).get("repo") else None, a.memory,
-                a.step_timeout)
+        vm = make_vm(bt, a.image, log, repo_disk if task.get("fixture", {}).get("repo") else None, a.memory,
+                     a.step_timeout)
         vm.login(a.password, a.new_password, a.boot_timeout)
         record["boot_seconds"] = round(time.time() - t0)
         if task.get("fixture", {}).get("repo"):
@@ -241,10 +242,10 @@ def run_task(task, a, bt, repo_disk, split):
             if sh(command, "fixture")[1] != 0:
                 raise RuntimeError(f"fixture failed: {command}")
         before = checks()
-        steps, decisions, outputs, failed, ran = [], [], [], [], False
-        for intent in task["solution"]:
+        steps, decisions, outputs, failed, step_failures, ran = [], [], [], [], [], False
+        for n, intent in enumerate(task["solution"], 1):
             intent = {"action": intent["action"], "args": intent.get("args", {})}
-            p = plan(a.guardian, intent)
+            p = planner(a.guardian, intent)
             decision = p["policy"]["decision"]
             decisions.append(decision)
             results = []
@@ -258,6 +259,7 @@ def run_task(task, a, bt, repo_disk, split):
                     outputs.append(out)
                     if not results[-1]["ok"] and not step["run"]["optional"]:
                         failed.append(f"{command} exited {rc}")
+                        step_failures.append({"step": n, "detail": f"{command} exited {rc}"})
                         break
             steps.append({
                 "intent": intent,
@@ -272,8 +274,10 @@ def run_task(task, a, bt, repo_disk, split):
         passed, reasons = judge(task, before, after, decisions, ran, failed)
         record.update(passed=passed, reasons=reasons, decisions=decisions, before=before, after=after,
                       undiscriminating=undiscriminating(task, before))
+        # Every episode that ran is exported, failed ones too: they are useful
+        # examples, and the outcome says plainly that they failed and why.
         record["trajectory"] = {
-            "schema": 1,
+            "schema": a.schema,
             "contract": a.contract,
             "episode": f"{task['id']}-reference-{a.stamp}",
             "task": task["id"],
@@ -281,7 +285,13 @@ def run_task(task, a, bt, repo_disk, split):
             "source": "reference",
             "request": task["request"],
             "steps": steps,
-            "outcome": {"checks": after, "ran_in_vm": True},
+            "outcome": {
+                "checks": after,
+                "ran_in_vm": True,
+                "step_failures": step_failures,
+                "verdict": "passed" if passed else "failed",
+                "reasons": reasons,
+            },
         }
     except Exception as e:  # a broken task must not stop the others
         record.update(passed=False, reasons=[f"{type(e).__name__}: {e}"])
@@ -356,7 +366,82 @@ def self_test():
     # repair whose checks pass although a required step failed.
     assert not judge(o, [], yes, ["allow"], True, ["/usr/bin/cpkg info -- bash exited 1"])[0]
     assert not judge(t, no, yes, ["confirm"], True, ["/usr/bin/systemctl start -- x exited 5"])[0]
+    self_test_episodes()
     print("vm-run self-test ok")
+
+
+class FakeVM:
+    """Answers commands from a table, for the self-test: {command: (output, exit)}."""
+
+    def __init__(self, answers):
+        self.answers = answers
+
+    def __call__(self, *args):
+        return self
+
+    def login(self, *args):
+        pass
+
+    def run(self, command):
+        return self.answers.get(command, ("", 0))
+
+    def close(self):
+        pass
+
+
+def self_test_episodes():
+    """run_task end to end with a fake VM and planner: the trajectory's outcome must
+    agree with the verdict, failed episodes included."""
+
+    class Args:
+        out = tempfile.gettempdir()
+        guardian = "unused"
+        contract = "sha256:" + "0" * 64
+        schema = 2
+        stamp = "test"
+        password = new_password = "x"
+        boot_timeout = step_timeout = 1
+        image = memory = None
+
+    task = {"id": "t", "family": "services", "kind": "repair", "request": "start x",
+            "fixture": {"commands": ["break x"]},
+            "solution": [{"action": "start_service", "args": {"service": "x"}}],
+            "check": [{"name": "x runs", "command": "check x"}]}
+    start = {"run": {"program": "/usr/bin/systemctl", "args": ["start", "--", "x"], "as": "root", "env": [],
+                     "optional": False, "success_codes": [0]}}
+
+    def planner(_guardian, _intent):
+        return {"policy": {"decision": "allow"}, "steps": [start]}
+
+    def episode(answers):
+        return run_task(task, Args, None, None, "train", make_vm=FakeVM(answers), planner=planner)
+
+    # The required step failed, but the check passes afterwards (something else
+    # started x): a failed episode, exported as one.
+    check_results = iter([("", 1), ("", 0)])
+
+    class Flaky(FakeVM):
+        def run(self, command):
+            return next(check_results) if command == "check x" else super().run(command)
+
+    r = run_task(task, Args, None, None, "train",
+                 make_vm=Flaky({"/usr/bin/systemctl start -- x": ("Job failed", 5)}), planner=planner)
+    assert not r["passed"], r
+    o = r["trajectory"]["outcome"]
+    assert o["verdict"] == "failed" and all(c["passed"] for c in o["checks"]), o
+    assert o["step_failures"] == [{"step": 1, "detail": "/usr/bin/systemctl start -- x exited 5"}], o
+    assert any("solution step failed" in x for x in o["reasons"]), o
+    assert "FAILED, exit code 5" in r["trajectory"]["steps"][0]["observation"]
+
+    # A clean repair: passed, no failures, no reasons.
+    check_results = iter([("", 1), ("", 0)])
+    r = run_task(task, Args, None, None, "train", make_vm=Flaky({}), planner=planner)
+    o = r["trajectory"]["outcome"]
+    assert r["passed"] and o["verdict"] == "passed" and o["step_failures"] == [] and o["reasons"] == [], r
+
+    # A fixture that cannot be applied is not an episode: nothing is exported.
+    r = episode({"break x": ("no such unit", 1)})
+    assert not r["passed"] and "trajectory" not in r, r
 
 
 def main():
@@ -397,6 +482,7 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     info = subprocess.run([a.core_ctl, "contract"], capture_output=True, text=True, check=True).stdout
     a.contract = re.search(r"^fingerprint:\s*(sha256:[0-9a-f]{64})$", info, re.M).group(1)
+    a.schema = int(re.search(r"^trajectory schema:\s*(\d+)$", info, re.M).group(1))
     a.stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     image_sha = sha256_file(a.image)
     bt = boot_test()
@@ -436,6 +522,11 @@ def main():
         "contract": a.contract,
         "accel": "kvm" if os.access("/dev/kvm", os.W_OK) else "tcg",
         "passed": sum(r["passed"] for r in records),
+        "trajectories": {
+            "passed": sum(r.get("trajectory", {}).get("outcome", {}).get("verdict") == "passed" for r in records),
+            "failed": sum(r.get("trajectory", {}).get("outcome", {}).get("verdict") == "failed" for r in records),
+            "not_exported": sum("trajectory" not in r for r in records),
+        },
         "total": len(records),
         "trajectory_check": {"exit": check.returncode, "output": (check.stdout + check.stderr).strip()},
         "tasks": [{k: v for k, v in r.items() if k != "trajectory"} for r in records],
