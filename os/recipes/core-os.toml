@@ -1,0 +1,49 @@
+[package]
+name = "core-os"
+version = "0.1.0"
+release = 1
+summary = "C.O.R.E. services: the Guardian, the conversational shell, telemetry and core-ctl"
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/sigenyi/project-core-os"
+
+[build]
+# Built from this repository on the build host (`cargo build --release -p core-guardian
+# -p core-shell -p core-ctl -p core-sense`) until the Rust toolchain itself is part
+# of the system, like cpkg. Bump `release` whenever the contents change (D12).
+#
+# Not packaged here: the model and speech services (core-inference, core-whisper and
+# their configuration) ship with a model package once one exists (docs/TRAINING.md,
+# D8), and the tty1 autologin belongs to an image with an interactive user
+# (os/tools/mkimage.sh --user).
+files = [
+  "../../target/release/core-guardian",
+  "../../target/release/core-shell",
+  "../../target/release/core-ctl",
+  "../../target/release/core-sensed",
+  "../../system",
+]
+after = ["systemd", "cpkg", "iproute2"]
+script = '''
+for b in core-guardian core-shell core-ctl core-sensed; do
+  install -Dm755 "$b" "$DESTDIR/usr/bin/$b"
+done
+for u in core-guardian.service core-guardian.socket core-sensed.service; do
+  install -Dm644 "system/usr/lib/systemd/system/$u" "$DESTDIR/usr/lib/systemd/system/$u"
+done
+install -Dm644 system/usr/lib/systemd/system-preset/80-core.preset "$DESTDIR/usr/lib/systemd/system-preset/80-core.preset"
+install -Dm644 system/usr/lib/sysusers.d/core.conf "$DESTDIR/usr/lib/sysusers.d/core.conf"
+install -Dm644 system/usr/lib/tmpfiles.d/core.conf "$DESTDIR/usr/lib/tmpfiles.d/core.conf"
+# The Guardian refuses a policy file that anyone but root can write.
+install -Dm644 system/etc/core/guardian.toml "$DESTDIR/etc/core/guardian.toml"
+install -Dm644 system/etc/core/agent.toml "$DESTDIR/etc/core/agent.toml"
+'''
+
+[runtime]
+# Programs the Guardian runs on this system's default backends (cpkg, systemd,
+# networkd); shared libraries are found from the binaries themselves.
+depends = ["systemd", "cpkg", "iproute2"]
+
+[ai]
+kind = "cli"
+launch = "core-shell"
+keywords = ["assistant", "ai", "guardian", "shell"]
