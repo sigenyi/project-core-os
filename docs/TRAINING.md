@@ -148,9 +148,10 @@ Guardian must deny the intent and nothing runs. It writes a console log per task
 `results.json`, and one reference trajectory for every episode that started (once the
 fixture is in place), whatever its verdict, sanitized and checked with `core-ctl
 trajectory`. A step that hangs or cannot be replayed is a recorded failure; after a
-hang the episode ends and its checks are recorded as not passed. A task whose VM,
-login, fixture or first state check failed produced no episode and has no
-trajectory; `results.json` lists it.
+hang, or when the final checks time out, the checks are recorded as not passed. A
+task whose VM, login, fixture or first state check failed produced no episode and
+has no trajectory, and neither does one whose reference solution the Guardian cannot
+plan (a bug in the task); `results.json` lists them.
 
 Until the Guardian is packaged on the image (phase 2), the reference solution is
 executed as the exact command lines the Guardian plans for it on the host

@@ -251,8 +251,11 @@ def run_task(task, a, bt, repo_disk, split, make_vm=VM, planner=plan):
             if sh(command, "fixture")[1] != 0:
                 raise RuntimeError(f"fixture failed: {command}")
         before = checks()
-        # From here on the episode has started: whatever goes wrong is recorded in
-        # its trajectory as a failure, not dropped.
+        # From here on the episode has started: a step that fails, hangs or cannot be
+        # replayed, and checks that cannot run, are recorded in its trajectory as
+        # failures, not dropped. Only a reference solution the Guardian cannot plan
+        # at all (`--plan` fails) ends the task without a trajectory: that is a bug
+        # in the task, not something an episode did.
         steps, decisions, outputs, failed, step_failures, ran = [], [], [], [], [], False
         hung = None
         for n, intent in enumerate(task["solution"], 1):
@@ -268,6 +271,8 @@ def run_task(task, a, bt, repo_disk, split, make_vm=VM, planner=plan):
                     try:
                         command = command_line(step)
                     except ValueError as e:
+                        if step.get("run", {}).get("optional"):
+                            continue  # an optional step the runner cannot replay is skipped
                         # The runner cannot carry this step out: not the solution's
                         # fault, but the episode did not do what it should.
                         failed.append(f"step cannot be replayed: {e}")
@@ -305,10 +310,14 @@ def run_task(task, a, bt, repo_disk, split, make_vm=VM, planner=plan):
             # The checks cannot run; they are recorded as not passed.
             after = [{"name": c["name"], "passed": False} for c in task.get("check", [])]
         else:
-            after = checks()
+            try:
+                after = checks()
+            except TimeoutError:
+                hung = "a state check timed out"
+                after = [{"name": c["name"], "passed": False} for c in task.get("check", [])]
         passed, reasons = judge(task, before, after, decisions, ran, failed)
         if hung:
-            reasons.append("the episode ended early: a step hung and the state checks could not run")
+            reasons.append(f"the state checks could not run to the end ({hung}); they are recorded as not passed")
         record.update(passed=passed, reasons=reasons, decisions=decisions, before=before, after=after,
                       undiscriminating=undiscriminating(task, before))
         # Every episode that ran is exported, failed ones too: they are useful
@@ -486,7 +495,7 @@ def self_test_episodes():
     r = run_task(task, Args, None, None, "train", make_vm=Hangs({}), planner=planner)
     o = r["trajectory"]["outcome"]
     assert o["verdict"] == "failed" and o["step_failures"][0]["detail"].endswith("timed out after 1s"), o
-    assert o["checks"] == [{"name": "x runs", "passed": False}] and any("ended early" in x for x in o["reasons"]), o
+    assert o["checks"] == [{"name": "x runs", "passed": False}] and any("could not run to the end" in x for x in o["reasons"]), o
     assert "FAILED, timed out" in r["trajectory"]["steps"][0]["observation"]
 
     # A step the runner cannot replay (a native Guardian operation): a failure too.
@@ -497,6 +506,32 @@ def self_test_episodes():
     r = run_task(task, Args, None, None, "train", make_vm=Flaky({}), planner=native)
     o = r["trajectory"]["outcome"]
     assert o["verdict"] == "failed" and "cannot be replayed" in o["step_failures"][0]["detail"], o
+
+    # Final checks that time out: exported as a failure with the checks not passed.
+    class ChecksHang(FakeVM):
+        calls = 0
+
+        def run(self, command):
+            if command == "check x":
+                ChecksHang.calls += 1
+                if ChecksHang.calls == 2:
+                    raise TimeoutError("waiting for marker")
+                return ("", 1)
+            return super().run(command)
+
+    r = run_task(task, Args, None, None, "train", make_vm=ChecksHang({}), planner=planner)
+    o = r["trajectory"]["outcome"]
+    assert o["verdict"] == "failed" and o["checks"] == [{"name": "x runs", "passed": False}], o
+    assert any("a state check timed out" in x for x in o["reasons"]), o
+
+    # An optional step the runner cannot replay is skipped, not a failure.
+    def optional_native(_guardian, _intent):
+        return {"policy": {"decision": "allow"},
+                "steps": [start, {"run": dict(start["run"], **{"as": "peer", "optional": True})}]}
+
+    check_results = iter([("", 1), ("", 0)])
+    r = run_task(task, Args, None, None, "train", make_vm=Flaky({}), planner=optional_native)
+    assert r["passed"] and r["trajectory"]["outcome"]["step_failures"] == [], r
 
     # A fixture that cannot be applied is not an episode: nothing is exported.
     r = episode({"break x": ("no such unit", 1)})
