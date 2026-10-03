@@ -86,7 +86,6 @@ echo "root:$PASSWORD" | chroot "$R" /usr/bin/chpasswd
 chroot "$R" /usr/bin/chage -d 0 root
 if [ -n "$USERNAME" ]; then
   chroot "$R" /usr/bin/getent group core >/dev/null || { echo "--user needs the core-os package (group core)" >&2; exit 1; }
-  grep -qx /usr/bin/core-shell "$R/etc/shells" 2>/dev/null || echo /usr/bin/core-shell >> "$R/etc/shells"
   # A user named like the group ("core") gets it as primary group; others get their own.
   if [ "$USERNAME" = core ]; then group=(--gid core); else group=(--user-group --groups core); fi
   chroot "$R" /usr/bin/useradd --create-home "${group[@]}" --shell /usr/bin/core-shell "$USERNAME"

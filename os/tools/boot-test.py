@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Boot a C.O.R.E. OS image in QEMU and check it from the inside.
 
-    boot-test.py IMAGE [--uefi] [--password core] [--new-password ...]
+    boot-test.py IMAGE [--uefi] [--password core] [--new-password ...] [--packages 89]
     boot-test.py --self-test
 
 The serial console is driven like a user would: wait for the login prompt, log in
@@ -51,7 +51,7 @@ CHECKS = [
     ("journal errors (shown, not fatal)", "journalctl -b --no-pager -q -p err -o cat | tail -n 20; echo journal-ok", r"journal-ok"),
     ("root file system", "findmnt -no SOURCE,FSTYPE,OPTIONS /", r"ext4\s+rw"),
     ("memory", "free -m | awk '/Mem:/{print \"used_mb=\"$3}'", r"used_mb=\d+"),
-    ("packages", "cpkg list | wc -l", r"^\s*89\s*$"),
+    ("packages", "cpkg list | wc -l", None),  # exactly --packages (see main)
     ("package integrity", "cpkg verify 2>&1; echo verify-exit=$?", verify_passed),
     ("library closure", "cpkg why glibc | head -3; echo why-ok", r"why-ok"),
     ("C compiler, glibc and kernel headers",
@@ -142,6 +142,9 @@ def main():
     ap.add_argument("--new-password", default="Core-boot-test-1")
     ap.add_argument("--memory", default="8G")
     ap.add_argument("--boot-timeout", type=int, default=900)
+    # How many packages the image installs: 89 for the base system, one more for each
+    # package added on top (90 with core-os). An exact count, not a minimum.
+    ap.add_argument("--packages", type=int, default=89)
     a = ap.parse_args()
 
     accel = ["-accel", "kvm"] if os.access("/dev/kvm", os.W_OK) else ["-accel", "tcg", "-cpu", "max"]
@@ -177,7 +180,8 @@ def main():
         # The prompt is spelled split in the command so its echo cannot match.
         con.send("stty -echo cols 200; export TERM=dumb PS1='CO''RE# '\n")
         con.expect(r"CORE# ", 30)
-        for desc, command, want in CHECKS:
+        checks = [(d, c, w if w is not None else rf"^\s*{a.packages}\s*$") for d, c, w in CHECKS]
+        for desc, command, want in checks:
             con.send(command + "; echo __END__\n")
             out = con.expect(r"__END__\r?\n", 600)
             out = KERNEL_LOG.sub("", ESCAPES.sub("", out).replace("\r", ""))
