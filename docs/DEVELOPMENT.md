@@ -34,6 +34,7 @@ cargo fmt --all
 # (read-only actions run for real; changes are simulated).
 cargo run -p core-shell -- --dev --backend rescue
 cargo run -p core-shell -- --dev --llama-url http://127.0.0.1:8080   # with a model
+cargo run -p core-shell -- --dev --backend script --script intents.jsonl  # replay intents, no model
 
 cargo run -p core-sense --bin core-sensed -- --once --summary        # what the AI sees
 cargo run -p core-ctl -- catalog                                     # every action

@@ -231,7 +231,7 @@ on the 8 GB target, judged by resulting state:
 
 ## Open decisions
 
-None of these is decided. Each needs Joel's decision before the phase that needs it.
+Each needs Joel's decision before the phase that needs it. D9, D10 and D12 are decided; the others are open.
 
 | # | Decision | Needed before | Notes |
 |---|---|---|---|
@@ -243,16 +243,15 @@ None of these is decided. Each needs Joel's decision before the phase that needs
 | D6 | Compute and spending caps | pilot | Teacher calls and training runs; per-run ceilings. |
 | D7 | Acceptance thresholds per family | product gate | Success rates, safety rates, latency and memory bounds. |
 | D8 | Model distribution | packaging | In the image as a cpkg package, or a separate download. |
-| D9 | Model for the integration gate | integration | Rescue planner only, or also an off-the-shelf model. |
-| D10 | Other distributions' backends | integration | Keep pacman/apt/... in the Guardian for development, or remove them. |
+| D9 | Model for the integration gate | integration | **Decided (Joel, 2026-10-03):** rescue planner plus scripted requests and reference intents (`core-shell --backend script`); no model in the gate. |
+| D10 | Other distributions' backends | integration | **Decided (Joel, 2026-10-03):** keep them as development backends; cpkg and networkd are the shipped defaults. |
 | D11 | Wi-Fi daemon | later | iwd or wpa_supplicant; neither is in the base. Wi-Fi actions currently report that no Wi-Fi daemon is configured. |
-| D12 | Package release numbers | integration | Bump the release on every content change (recommended) or not. |
+| D12 | Package release numbers | integration | **Decided (Joel, 2026-10-03):** bump the release whenever a package's contents change. |
 
-### Proposals for D9, D10 and D12 (not decided)
+### D9, D10 and D12: proposed, then approved
 
-These are proposed defaults, so that integration work is not blocked. They are not
-decisions: each stays open until Joel accepts, changes or rejects it, and nothing in
-the code depends on them yet.
+These were proposed as defaults, with the reasons below, and Joel approved all
+three on 2026-10-03. The other open decisions are unchanged.
 
 - **D9, model for the integration gate. Proposal:** pass the integration gate with
   the deterministic rescue planner and with a *scripted* intent source that replays

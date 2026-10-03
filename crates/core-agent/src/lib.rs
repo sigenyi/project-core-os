@@ -28,7 +28,7 @@ pub use orchestrator::{Agent, Outcome};
 
 use std::time::Duration;
 
-use backend::{InferenceBackend, LlamaServer, RescuePlanner};
+use backend::{BrokenScript, InferenceBackend, LlamaServer, RescuePlanner, ScriptedIntents};
 use config::BackendKind;
 
 /// Build the inference backend described by the configuration.
@@ -40,5 +40,12 @@ pub fn backend_from_config(config: &AgentConfig) -> Box<dyn InferenceBackend> {
             Duration::from_secs(config.inference.timeout_secs),
         )),
         BackendKind::Rescue => Box::new(RescuePlanner),
+        BackendKind::Script => match &config.inference.script {
+            Some(path) => match ScriptedIntents::load(path) {
+                Ok(script) => Box::new(script),
+                Err(e) => Box::new(BrokenScript(e)),
+            },
+            None => Box::new(BrokenScript("the script backend needs inference.script (or --script)".into())),
+        },
     }
 }

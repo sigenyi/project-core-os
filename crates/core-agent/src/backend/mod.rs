@@ -2,11 +2,13 @@
 
 mod llama;
 mod rescue;
+mod script;
 
 use std::fmt;
 
 pub use llama::LlamaServer;
 pub use rescue::{RescuePlanner, plan as rescue_plan};
+pub use script::{BrokenScript, SCRIPT_DONE, ScriptedIntents};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {

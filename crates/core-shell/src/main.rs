@@ -24,6 +24,8 @@ use inprocess::InProcessGuardian;
 enum BackendArg {
     Llama,
     Rescue,
+    /// Replay intents from --script (testing without a model).
+    Script,
 }
 
 #[derive(Parser)]
@@ -38,6 +40,9 @@ struct Cli {
     /// Override the inference backend.
     #[arg(long, value_enum)]
     backend: Option<BackendArg>,
+    /// Intent script for `--backend script` (one intent per line).
+    #[arg(long)]
+    script: Option<PathBuf>,
     /// Override the llama-server URL.
     #[arg(long)]
     llama_url: Option<String>,
@@ -81,7 +86,11 @@ fn load_config(cli: &Cli) -> AgentConfig {
     match cli.backend {
         Some(BackendArg::Llama) => config.inference.backend = BackendKind::Llama,
         Some(BackendArg::Rescue) => config.inference.backend = BackendKind::Rescue,
+        Some(BackendArg::Script) => config.inference.backend = BackendKind::Script,
         None => {}
+    }
+    if let Some(script) = &cli.script {
+        config.inference.script = Some(script.clone());
     }
     if let Some(socket) = &cli.socket {
         config.guardian.socket = socket.clone();

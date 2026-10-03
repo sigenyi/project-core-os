@@ -26,6 +26,9 @@ pub enum BackendKind {
     Llama,
     /// Deterministic keyword planner; no model needed.
     Rescue,
+    /// Intents replayed from `inference.script`, one per model turn (integration
+    /// tests without a model; docs/TRAINING.md, D9).
+    Script,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +45,8 @@ pub struct InferenceConfig {
     pub timeout_secs: u64,
     /// Fall back to rescue mode when the model server is unreachable.
     pub fallback_to_rescue: bool,
+    /// Intent script for the `script` backend (JSON lines).
+    pub script: Option<PathBuf>,
 }
 
 impl Default for InferenceConfig {
@@ -55,6 +60,7 @@ impl Default for InferenceConfig {
             context_tokens: 8192,
             timeout_secs: 180,
             fallback_to_rescue: true,
+            script: None,
         }
     }
 }
