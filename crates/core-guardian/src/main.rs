@@ -26,6 +26,10 @@ struct Cli {
     /// Validate the configuration, report missing tools and exit.
     #[arg(long)]
     check: bool,
+    /// Print the policy decision and plan for an intent (JSON) and exit. Executes
+    /// nothing; needs no privileges.
+    #[arg(long, value_name = "INTENT")]
+    plan: Option<String>,
     /// Increase log verbosity (-v, -vv).
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
@@ -76,6 +80,9 @@ fn run(cli: Cli) -> Result<(), String> {
     if cli.check {
         return check(&config);
     }
+    if let Some(intent) = &cli.plan {
+        return print_plan(&config, intent);
+    }
     if is_root() {
         check_config_ownership(&cli.config)?;
     } else if !config.dry_run {
@@ -101,6 +108,20 @@ fn run(cli: Cli) -> Result<(), String> {
         acquire_listener(&config).map_err(|e| format!("cannot listen on {}: {e}", config.socket.display()))?;
     let guardian = Arc::new(live_guardian(config, audit));
     serve(guardian, listener, access).map_err(|e| e.to_string())
+}
+
+fn print_plan(config: &GuardianConfig, intent: &str) -> Result<(), String> {
+    let intent: core_protocol::Intent = serde_json::from_str(intent).map_err(|e| format!("intent: {e}"))?;
+    // Read-only facts only; systemctl is not consulted, so a preview never touches
+    // the machine it runs on.
+    let probe = core_guardian::planner::LiveProbe {
+        sysfs: config.native.sysfs.clone(),
+        procfs: config.native.procfs.clone(),
+        systemctl: None,
+    };
+    let preview = core_guardian::preview::preview(config, &probe, &intent)?;
+    println!("{}", serde_json::to_string_pretty(&preview).map_err(|e| e.to_string())?);
+    Ok(())
 }
 
 fn check(config: &GuardianConfig) -> Result<(), String> {

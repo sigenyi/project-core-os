@@ -31,7 +31,7 @@ the console a native-resolution framebuffer.
   └─────────────────────────────────────┘                                         └────────────────────────────┘
                  │ argv + scrubbed env                      (optional: core-whisper, whisper.cpp speech-to-text)
                  ▼
-     systemctl · pacman · nmcli · wpctl · modprobe · …
+     systemctl · cpkg · networkctl · wpctl · modprobe · …
 ```
 
 | Crate / unit | Runs as | Responsibility |
@@ -136,8 +136,10 @@ The pipeline for every request, in `Guardian::handle`:
 5. **Confirmation:** risky actions are parked under a random single-use token bound
    to the connection. The shell asks the human directly; the model never sees or
    produces tokens.
-6. **Planning** for the configured distribution (pacman/apt/dnf/zypper/apk/xbps,
-   PipeWire/PulseAudio/ALSA, NetworkManager/iwd) into fixed steps.
+6. **Planning** for the configured distribution (cpkg on C.O.R.E. OS, or
+   pacman/apt/dnf/zypper/apk/xbps; PipeWire/PulseAudio/ALSA; systemd-networkd and
+   resolved on C.O.R.E. OS, or NetworkManager/iwd) into fixed steps.
+   `core-guardian --plan INTENT` prints the decision and plan without executing.
 7. **Execution:** programs come only from the configured `[tools]` table and get
    argv vectors (never a shell) with option parsing terminated by `--` where
    supported. Each runs with a scrubbed environment, `/dev/null` stdin, its own

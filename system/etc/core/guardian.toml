@@ -30,9 +30,9 @@ max_requests_per_minute = 60
 dry_run = false
 
 [system]
-package_manager = "pacman"     # pacman | apt | dnf | zypper | apk | xbps
+package_manager = "cpkg"       # cpkg (C.O.R.E. OS) | pacman | apt | dnf | zypper | apk | xbps
 audio = "wpctl"                # wpctl (PipeWire) | pactl (PulseAudio) | amixer (ALSA)
-network = "networkmanager"     # networkmanager | iwd
+network = "networkd"           # networkd (wired; no Wi-Fi daemon) | networkmanager | iwd
 
 [actions]
 # Refuse these outright, e.g. ["poweroff", "remove_package"].
@@ -67,7 +67,7 @@ protected = [
 protected = [
     "base", "linux", "linux-lts", "linux-zen", "linux-hardened", "linux-firmware",
     "systemd", "systemd-libs", "glibc", "pacman", "bash", "coreutils", "util-linux",
-    "filesystem", "core-os", "llama.cpp", "sudo",
+    "filesystem", "cpkg", "grub", "core-os", "llama.cpp", "sudo",
 ]
 
 # [tools]

@@ -1,7 +1,7 @@
 //! Translate typed actions into concrete plans for the configured distribution.
 //!
-//! This is where distribution differences live (pacman vs apt, PipeWire vs ALSA,
-//! NetworkManager vs iwd). Every argument placed in a command has already passed the
+//! This is where distribution differences live (cpkg vs pacman vs apt, PipeWire vs
+//! ALSA, systemd-networkd vs NetworkManager vs iwd). Every argument placed in a command has already passed the
 //! validators in `core-protocol`; option parsing is additionally terminated with `--`
 //! wherever the target tool supports it.
 
@@ -79,6 +79,10 @@ pub struct Planner<'a> {
     probe: &'a dyn SystemProbe,
 }
 
+/// Why Wi-Fi actions cannot be planned with systemd-networkd alone.
+const NO_WIFI_DAEMON: &str = "Wi-Fi is not available: this system manages networks with systemd-networkd, and no Wi-Fi \
+     daemon (iwd or wpa_supplicant) is configured. Wired networking is managed automatically.";
+
 /// Exit codes of `systemctl status`: 0 running, 1-3 dead/failed/inactive (all informative).
 const SYSTEMCTL_STATUS_OK: &[i32] = &[0, 1, 2, 3];
 
@@ -153,10 +157,20 @@ impl<'a> Planner<'a> {
                     CommandSpec::new("ps", ["-eo", "pid,user,%cpu,%mem,etime,comm", sort]).head(*limit as usize + 1),
                 )
             }
-            NetworkStatus => Plan::run(CommandSpec::new("ip", ["-brief", "address"]))
-                .then_run(CommandSpec::new("ip", ["route"]))
-                .then(Step::Native(NativeOp::ReadFixedFile { path: "/etc/resolv.conf", lines: 20 })),
+            NetworkStatus => match self.config.system.network {
+                // networkd's own view (link state, "routable") and resolved's DNS
+                // servers; /etc/resolv.conf only names resolved's stub there.
+                NetworkBackend::Networkd => Plan::run(CommandSpec::new("networkctl", ["list", "--no-pager"]))
+                    .then_run(CommandSpec::new("ip", ["route"]))
+                    .then_run(CommandSpec::new("resolvectl", ["status", "--no-pager"]).head(40)),
+                NetworkBackend::NetworkManager | NetworkBackend::Iwd => {
+                    Plan::run(CommandSpec::new("ip", ["-brief", "address"]))
+                        .then_run(CommandSpec::new("ip", ["route"]))
+                        .then(Step::Native(NativeOp::ReadFixedFile { path: "/etc/resolv.conf", lines: 20 }))
+                }
+            },
             WifiScan => match self.config.system.network {
+                NetworkBackend::Networkd => return Err(NO_WIFI_DAEMON.into()),
                 NetworkBackend::NetworkManager => Plan::run(CommandSpec::new(
                     "nmcli",
                     ["-f", "IN-USE,SSID,SIGNAL,SECURITY", "device", "wifi", "list", "--rescan", "yes"],
@@ -174,6 +188,8 @@ impl<'a> Planner<'a> {
             SearchPackages { query } => {
                 let words: Vec<&str> = query.as_str().split_whitespace().collect();
                 let c = match self.config.system.package_manager {
+                    // cpkg exits 0 with no output when nothing matches.
+                    PackageManager::Cpkg => CommandSpec::new("cpkg", ["search", "--"]),
                     PackageManager::Pacman => CommandSpec::new("pacman", ["-Ss", "--"]),
                     PackageManager::Apt => CommandSpec::new("apt-cache", ["search", "--"]),
                     PackageManager::Dnf => CommandSpec::new("dnf", ["search", "--"]),
@@ -186,6 +202,7 @@ impl<'a> Planner<'a> {
             }
             PackageInfo { package } => {
                 let c = match self.config.system.package_manager {
+                    PackageManager::Cpkg => CommandSpec::new("cpkg", ["info", "--"]),
                     PackageManager::Pacman => CommandSpec::new("pacman", ["-Qi", "--"]),
                     PackageManager::Apt => CommandSpec::new("dpkg", ["-s", "--"]),
                     PackageManager::Dnf | PackageManager::Zypper => CommandSpec::new("rpm", ["-qi", "--"]),
@@ -235,6 +252,7 @@ impl<'a> Planner<'a> {
             LoadKernelModule { module } => Plan::run(CommandSpec::new("modprobe", ["--"]).arg(module.as_str())),
             UnloadKernelModule { module } => Plan::run(CommandSpec::new("modprobe", ["-r", "--"]).arg(module.as_str())),
             WifiConnect { ssid, passphrase } => match self.config.system.network {
+                NetworkBackend::Networkd => return Err(NO_WIFI_DAEMON.into()),
                 NetworkBackend::NetworkManager => {
                     let mut c = CommandSpec::new("nmcli", ["device", "wifi", "connect"]).arg(ssid.as_str());
                     if let Some(p) = passphrase {
@@ -266,6 +284,7 @@ impl<'a> Planner<'a> {
 
             InstallPackage { package } => Plan::run(
                 match self.config.system.package_manager {
+                    PackageManager::Cpkg => CommandSpec::new("cpkg", ["install", "--"]),
                     PackageManager::Pacman => CommandSpec::new("pacman", ["-S", "--noconfirm", "--needed", "--"]),
                     PackageManager::Apt => {
                         CommandSpec::new("apt-get", ["install", "-y", "--"]).env("DEBIAN_FRONTEND", "noninteractive")
@@ -281,6 +300,8 @@ impl<'a> Planner<'a> {
             ),
             RemovePackage { package } => Plan::run(
                 match self.config.system.package_manager {
+                    // Never --force: cpkg refuses to remove what other packages need.
+                    PackageManager::Cpkg => CommandSpec::new("cpkg", ["remove", "--"]),
                     PackageManager::Pacman => CommandSpec::new("pacman", ["-Rns", "--noconfirm", "--"]),
                     PackageManager::Apt => {
                         CommandSpec::new("apt-get", ["remove", "-y", "--"]).env("DEBIAN_FRONTEND", "noninteractive")
@@ -297,6 +318,7 @@ impl<'a> Planner<'a> {
             UpdateSystem => {
                 let t = self.pkg_timeout();
                 match self.config.system.package_manager {
+                    PackageManager::Cpkg => Plan::run(CommandSpec::new("cpkg", ["upgrade"]).timeout(t).tail(40)),
                     PackageManager::Pacman => {
                         Plan::run(CommandSpec::new("pacman", ["-Syu", "--noconfirm"]).timeout(t).tail(40))
                     }
@@ -416,13 +438,58 @@ mod tests {
 
     #[test]
     fn every_guardian_action_plans_with_defaults() {
+        // The defaults are C.O.R.E. OS: every action plans except Wi-Fi, which has
+        // no daemon there and says so.
         let probe = FakeProbe { wifi: vec!["wlan0".into()], fs: "ext4" };
         let config = GuardianConfig::default();
         for spec in core_protocol::CATALOG.iter().filter(|s| s.executor == core_protocol::Executor::Guardian) {
             let args: serde_json::Value = serde_json::from_str(spec.example).unwrap();
-            let steps = plan_with(&config, &probe, spec.name, args).unwrap_or_else(|e| panic!("{}: {e}", spec.name));
+            let result = plan_with(&config, &probe, spec.name, args);
+            if spec.name.starts_with("wifi_") {
+                assert!(result.unwrap_err().contains("no Wi-Fi daemon"), "{}", spec.name);
+                continue;
+            }
+            let steps = result.unwrap_or_else(|e| panic!("{}: {e}", spec.name));
             assert!(!steps.is_empty(), "{}", spec.name);
         }
+        // With a Wi-Fi capable backend, every action plans.
+        let mut nm = GuardianConfig::default();
+        nm.system.network = NetworkBackend::NetworkManager;
+        for spec in core_protocol::CATALOG.iter().filter(|s| s.executor == core_protocol::Executor::Guardian) {
+            let args: serde_json::Value = serde_json::from_str(spec.example).unwrap();
+            plan_with(&nm, &probe, spec.name, args).unwrap_or_else(|e| panic!("{}: {e}", spec.name));
+        }
+    }
+
+    #[test]
+    fn cpkg_packages() {
+        assert_eq!(plan("install_package", json!({"package": "w3m"})), ["cpkg install -- w3m"]);
+        assert_eq!(plan("remove_package", json!({"package": "w3m"})), ["cpkg remove -- w3m"]);
+        assert_eq!(plan("update_system", json!({})), ["cpkg upgrade"]);
+        assert_eq!(plan("package_info", json!({"package": "nano"})), ["cpkg info -- nano"]);
+        assert_eq!(plan("search_packages", json!({"query": "text editor"})), ["cpkg search -- text editor"]);
+        // A name that looks like an option stays an operand.
+        let probe = FakeProbe { wifi: vec![], fs: "ext4" };
+        let v = ValidatedAction::from_intent(&Intent::new("install_package", json!({"package": "nano"}))).unwrap();
+        let p = Planner::new(&GuardianConfig::default(), &probe).plan(&v.action).unwrap();
+        let Step::Run(cmd) = &p.steps[0] else { panic!() };
+        assert_eq!(cmd.timeout, Some(Duration::from_secs(GuardianConfig::default().package_timeout_secs)));
+    }
+
+    #[test]
+    fn networkd_status_and_no_wifi() {
+        assert_eq!(
+            plan("network_status", json!({})),
+            ["networkctl list --no-pager", "ip route", "resolvectl status --no-pager"]
+        );
+        let err = plan_with(
+            &GuardianConfig::default(),
+            &FakeProbe { wifi: vec!["wlan0".into()], fs: "ext4" },
+            "wifi_connect",
+            json!({"ssid": "Home", "passphrase": "hunter222"}),
+        )
+        .unwrap_err();
+        assert!(err.contains("no Wi-Fi daemon") && !err.contains("hunter222"), "{err}");
     }
 
     #[test]
@@ -439,10 +506,19 @@ mod tests {
 
     #[test]
     fn packages_per_distribution() {
-        assert_eq!(plan("install_package", json!({"package": "w3m"})), ["pacman -S --noconfirm --needed -- w3m"]);
+        let probe = FakeProbe { wifi: vec![], fs: "ext4" };
+        let mut pacman = GuardianConfig::default();
+        pacman.system.package_manager = PackageManager::Pacman;
+        assert_eq!(
+            plan_with(&pacman, &probe, "install_package", json!({"package": "w3m"})).unwrap(),
+            ["pacman -S --noconfirm --needed -- w3m"]
+        );
+        assert_eq!(
+            plan_with(&pacman, &probe, "search_packages", json!({"query": "web browser"})).unwrap(),
+            ["pacman -Ss -- web browser"]
+        );
         let mut c = GuardianConfig::default();
         c.system.package_manager = PackageManager::Apt;
-        let probe = FakeProbe { wifi: vec![], fs: "ext4" };
         assert_eq!(
             plan_with(&c, &probe, "install_package", json!({"package": "w3m"})).unwrap(),
             ["apt-get install -y -- w3m"]
@@ -451,13 +527,20 @@ mod tests {
             plan_with(&c, &probe, "update_system", json!({})).unwrap(),
             ["apt-get update", "apt-get upgrade -y"]
         );
-        assert_eq!(plan("search_packages", json!({"query": "web browser"})), ["pacman -Ss -- web browser"]);
     }
 
     #[test]
     fn wifi_backends_and_secrets() {
+        let mut nm = GuardianConfig::default();
+        nm.system.network = NetworkBackend::NetworkManager;
         assert_eq!(
-            plan("wifi_connect", json!({"ssid": "Home Net", "passphrase": "hunter222"})),
+            plan_with(
+                &nm,
+                &FakeProbe { wifi: vec!["wlan0".into()], fs: "ext4" },
+                "wifi_connect",
+                json!({"ssid": "Home Net", "passphrase": "hunter222"})
+            )
+            .unwrap(),
             ["nmcli device wifi connect 'Home Net' password <redacted>"]
         );
         let mut c = GuardianConfig::default();

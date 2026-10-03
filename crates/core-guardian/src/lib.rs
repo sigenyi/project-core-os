@@ -20,6 +20,7 @@ pub mod native;
 pub mod plan;
 pub mod planner;
 pub mod policy;
+pub mod preview;
 pub mod runner;
 pub mod server;
 pub mod service;

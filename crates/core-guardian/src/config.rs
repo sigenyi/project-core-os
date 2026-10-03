@@ -46,6 +46,8 @@ pub struct GuardianConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PackageManager {
+    /// cpkg, C.O.R.E. OS's own package manager.
+    Cpkg,
     Pacman,
     Apt,
     Dnf,
@@ -68,6 +70,9 @@ pub enum AudioBackend {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NetworkBackend {
+    /// systemd-networkd and systemd-resolved (C.O.R.E. OS). Wired only: no Wi-Fi
+    /// daemon is configured, so Wi-Fi actions are refused with an explanation.
+    Networkd,
     NetworkManager,
     Iwd,
 }
@@ -83,9 +88,9 @@ pub struct SystemConfig {
 impl Default for SystemConfig {
     fn default() -> Self {
         SystemConfig {
-            package_manager: PackageManager::Pacman,
+            package_manager: PackageManager::Cpkg,
             audio: AudioBackend::Wpctl,
-            network: NetworkBackend::NetworkManager,
+            network: NetworkBackend::Networkd,
         }
     }
 }
@@ -161,6 +166,8 @@ impl Default for PackagePolicy {
             "coreutils",
             "util-linux",
             "filesystem",
+            "cpkg",
+            "grub",
             "core-os",
             "llama.cpp",
             "sudo",
@@ -223,6 +230,8 @@ pub fn default_tools() -> BTreeMap<String, PathBuf> {
         ("ps", "/usr/bin/ps"),
         ("ip", "/usr/bin/ip"),
         ("ping", "/usr/bin/ping"),
+        ("networkctl", "/usr/bin/networkctl"),
+        ("resolvectl", "/usr/bin/resolvectl"),
         ("nmcli", "/usr/bin/nmcli"),
         ("iwctl", "/usr/bin/iwctl"),
         ("wpctl", "/usr/bin/wpctl"),
@@ -236,6 +245,7 @@ pub fn default_tools() -> BTreeMap<String, PathBuf> {
         ("mkswap", "/usr/bin/mkswap"),
         ("fallocate", "/usr/bin/fallocate"),
         ("btrfs", "/usr/bin/btrfs"),
+        ("cpkg", "/usr/bin/cpkg"),
         ("pacman", "/usr/bin/pacman"),
         ("apt-get", "/usr/bin/apt-get"),
         ("apt-cache", "/usr/bin/apt-cache"),
@@ -328,6 +338,13 @@ mod tests {
         let c = GuardianConfig::from_toml("").unwrap();
         assert_eq!(c.auto_approve, Risk::Low);
         assert!(c.tools.contains_key("systemctl"));
+        // The defaults describe C.O.R.E. OS itself.
+        assert_eq!(c.system.package_manager, PackageManager::Cpkg);
+        assert_eq!(c.system.network, NetworkBackend::Networkd);
+        assert!(c.packages.protected.iter().any(|p| p == "cpkg"));
+        for tool in ["cpkg", "networkctl", "resolvectl"] {
+            assert!(c.tools[tool].is_absolute(), "{tool}");
+        }
     }
 
     #[test]
@@ -357,6 +374,8 @@ mod tests {
     fn shipped_config_is_valid() {
         let c = GuardianConfig::from_toml(include_str!("../../../system/etc/core/guardian.toml")).unwrap();
         assert_eq!(c.auto_approve, Risk::Low);
+        assert_eq!(c.system.package_manager, PackageManager::Cpkg);
+        assert_eq!(c.system.network, NetworkBackend::Networkd);
         assert!(c.services.protected.iter().any(|s| s == "core-guardian"));
     }
 

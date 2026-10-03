@@ -94,9 +94,11 @@ os/tools/boot-test.py core.img
   tested, and its grammar is verified against llama.cpp.
 * The base OS is built from source by `core-build` and booted in QEMU by
   `os/tools/boot-test.py`; see [docs/BASE-OS.md](docs/BASE-OS.md).
-* Next: move the AI stack's package and network actions from the earlier
-  Arch-based prototype (pacman, NetworkManager) to `cpkg` and systemd-networkd,
-  package it for the base OS, and build the standalone graphical sessions. See the
+* The Guardian plans package actions with `cpkg` and network status with
+  systemd-networkd and resolved, as on C.O.R.E. OS (other distributions' backends
+  remain selectable).
+* Next: package the AI stack for the base OS and pass the integration gate, then the
+  training groundwork in [docs/TRAINING.md](docs/TRAINING.md). See the
   [roadmap](docs/ROADMAP.md).
 
 ## Development
