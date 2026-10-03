@@ -36,8 +36,9 @@ See [BASE-OS.md](BASE-OS.md).
 - [ ] Test suites for the rest of the base (Python, Perl, coreutils, ...)
 - [x] Image assembly from packages only; boots in QEMU with BIOS and UEFI and
       passes `os/tools/boot-test.py`
-- [ ] Move the Guardian's package and network actions from pacman and
-      NetworkManager to `cpkg` and systemd-networkd/resolved
+- [x] Move the Guardian's package and network actions from pacman and
+      NetworkManager to `cpkg` and systemd-networkd/resolved (Wi-Fi needs a daemon
+      that is not in the base yet; see TRAINING.md, D11)
 - [ ] Package the C.O.R.E. services, llama.cpp and whisper.cpp for the base OS
 - [ ] Rust toolchain as an OS package, so C.O.R.E. builds itself
 - [ ] A public package repository and `cpkg upgrade` against it
@@ -48,11 +49,20 @@ See [BASE-OS.md](BASE-OS.md).
 
 ## Phase 3: the model
 
+See [TRAINING.md](TRAINING.md): the integration gate and the trained model's product
+acceptance gate are separate, and the open decisions (teacher, student, licenses,
+data policy, budget, thresholds) are listed there.
+
+- [x] Foundation: versioned action contract, sanitized trajectory format, held-out
+      task specifications with frozen splits, disposable-VM task runner
 - [ ] Training environment: the base OS in VMs, with fixtures for broken states
       (stopped services, missing packages, bad configuration)
+- [ ] Pilot: a small validated dataset and evaluation with stop/go criteria, before
+      costly generation or training
 - [ ] Data: tasks and trajectories collected against real systems, checked by
       replaying them through the Guardian
 - [ ] Distil a 4B-class model for the action catalog; evaluate it per task family
+      on the frozen held-out set (product acceptance gate)
 - [ ] Pin model checksums; ask llama-server for its real context size (`/props`)
 - [ ] Stream model output so long answers start appearing immediately
 
