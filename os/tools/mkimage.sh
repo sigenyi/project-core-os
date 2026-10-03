@@ -10,8 +10,9 @@
 #
 # --user NAME creates the person who talks to C.O.R.E.: a member of the "core"
 # group (which may use the Guardian socket; it comes from the core-os package), with
-# core-shell as login shell, logged in automatically on tty1. Its password is the
-# --password one and must be changed at first login, like root's.
+# core-shell as login shell. It logs in like any user, with a password: no
+# autologin is configured. Its password is the --password one and must be changed
+# at first login, like root's.
 #
 # Disk layout (GPT):
 #   1  BIOS boot      1 MiB   GRUB core image for legacy BIOS
@@ -92,11 +93,6 @@ if [ -n "$USERNAME" ]; then
   chroot "$R" /usr/bin/id -nG "$USERNAME" | grep -qw core
   echo "$USERNAME:$PASSWORD" | chroot "$R" /usr/bin/chpasswd
   chroot "$R" /usr/bin/chage -d 0 "$USERNAME"
-  dropin="$R/etc/systemd/system/getty@tty1.service.d"
-  mkdir -p "$dropin"
-  sed "s/--autologin core /--autologin $USERNAME /" \
-    "$here/../../system/etc/systemd/system/getty@tty1.service.d/autologin.conf" > "$dropin/autologin.conf"
-  grep -q -- "--autologin $USERNAME " "$dropin/autologin.conf"
 fi
 
 step "Partitioning"
