@@ -77,8 +77,10 @@ checks. The format is defined in `core_protocol::trajectory` and checked by
 
 - every intent must validate against the catalog;
 - secret parameters (Wi-Fi passphrases) must be redacted, and their values are
-  scrubbed wherever they were echoed. This only works on the raw episode: records
-  must be sanitized before anything else redacts them;
+  scrubbed wherever they were echoed (values of 8 characters or more, the catalog's
+  minimum). This only works on the raw episode: records must be sanitized before
+  anything else redacts them. Arguments of non-catalog actions are redacted when a
+  word of their name says secret (`password`, `key`, `token`, ...);
 - the request, thoughts, observations and free-text arguments are sanitized: MAC
   addresses, non-loopback IP addresses (also in URLs, with ports, IPv4-mapped) and
   user names in home paths become placeholders; typed arguments get reserved
@@ -144,7 +146,7 @@ and search, and one refusal (removing glibc). They were split by `split.py freez
 before any trajectory was made: held-out `pkg-info-bash`, `pkg-missing-bc`,
 `pkg-search-editor`; dev `pkg-missing-nano`, `safety-remove-glibc`; the rest train.
 
-On the clean 04d33bf image (TCG, no KVM), all nine pass in VMs, about 40 to 50
+On the clean 04d33bf image (TCG, no KVM), all nine pass in VMs, 37 to 48
 seconds each: every repair check failed after its fixture and passed after the
 reference solution, the glibc removal was denied and glibc verified intact, and the
 nine reference trajectories validate against the contract. The first run found a

@@ -135,8 +135,11 @@ pub fn sanitize(t: &mut Trajectory) {
             if !secret {
                 continue;
             }
+            // The argument is always redacted. Its value is scrubbed from text only
+            // when it is long enough to be a real secret (catalog secrets have at
+            // least 8 characters): a model's "y" must not be cut out of every word.
             if let Some(s) = v.as_str() {
-                if s != REDACTED && !s.is_empty() {
+                if s != REDACTED && s.chars().count() >= MIN_ECHOED_SECRET {
                     secrets.push(s.to_string());
                 }
             }
@@ -164,23 +167,49 @@ pub fn sanitize(t: &mut Trajectory) {
         // the intent still validates.
         let spec = catalog::find(&step.intent.action);
         for (name, v) in step.intent.args.iter_mut() {
-            let Some(text) = v.as_str() else { continue };
-            if text == REDACTED {
-                continue;
-            }
             let free_text = match spec.and_then(|spec| spec.param(name)) {
                 Some(p) => matches!(p.kind, catalog::ParamKind::Text { .. }),
                 None => true,
             };
-            let cleaned = if free_text { clean(text) } else { scrub_with(&unsecret(text), Style::DocumentationValues) };
-            *v = serde_json::Value::String(cleaned);
+            let scrub = |text: &str| {
+                if free_text { clean(text) } else { scrub_with(&unsecret(text), Style::DocumentationValues) }
+            };
+            scrub_value(v, &scrub);
         }
     }
 }
 
+/// Echoed values shorter than this are not scrubbed from text (see [`sanitize`]).
+const MIN_ECHOED_SECRET: usize = 8;
+
+/// Every string in an argument value, also inside lists (`launch_program`'s args).
+fn scrub_value(v: &mut serde_json::Value, scrub: &dyn Fn(&str) -> String) {
+    match v {
+        serde_json::Value::String(text) if text != REDACTED => *text = scrub(text),
+        serde_json::Value::Array(items) => items.iter_mut().for_each(|i| scrub_value(i, scrub)),
+        serde_json::Value::Object(map) => map.values_mut().for_each(|i| scrub_value(i, scrub)),
+        _ => {}
+    }
+}
+
+/// Whether an argument of a non-catalog action holds a secret, judged by the words
+/// of its name (`wifi_password`, `api-key`; not `keyboard` or `monkey`).
 fn looks_secret(name: &str) -> bool {
-    let n = name.to_ascii_lowercase();
-    ["pass", "psk", "secret", "token", "key", "credential"].iter().any(|w| n.contains(w))
+    const WORDS: &[&str] = &[
+        "pass",
+        "password",
+        "passphrase",
+        "passwd",
+        "psk",
+        "secret",
+        "token",
+        "key",
+        "apikey",
+        "credential",
+        "credentials",
+        "pin",
+    ];
+    name.to_ascii_lowercase().split(|c: char| !c.is_ascii_alphanumeric()).any(|w| WORDS.contains(&w))
 }
 
 /// Everything wrong with a record for a dataset pinned to `contract`. Empty means
@@ -299,6 +328,8 @@ fn scrub_segment(seg: &str, style: Style) -> String {
         None
     };
     match replaced {
+        // A documentation address has no interface; its zone would not parse.
+        Some(r) if style == Style::DocumentationValues => format!("{r}{trailing}"),
         Some(r) => format!("{r}{trailing}{zone}"),
         None => seg.to_string(),
     }
@@ -475,6 +506,41 @@ mod tests {
         sanitize(&mut t);
         assert_eq!(t.steps[0].intent.args["path"], "/home/user/notes");
         assert_eq!(validate(&t, crate::contract::fingerprint()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn list_arguments_are_scrubbed() {
+        let mut t = record();
+        t.steps[0].intent =
+            Intent::new("launch_program", json!({"program": "w3m", "args": ["/home/joel/x", "http://192.168.1.9/"]}));
+        assert!(validate(&t, crate::contract::fingerprint()).iter().any(|p| p.contains("not sanitized")));
+        sanitize(&mut t);
+        assert_eq!(t.steps[0].intent.args["args"], json!(["/home/user/x", "http://192.0.2.1/"]));
+        assert_eq!(validate(&t, crate::contract::fingerprint()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn short_or_misnamed_values_of_unknown_actions_do_not_wreck_text() {
+        let mut t = record();
+        t.request = "say yes to my keyboard box".into();
+        t.steps[0].intent = Intent::new("wifi_conect", json!({"key": "y", "keyboard_layout": "us", "monkey": "a"}));
+        t.steps[0].disposition = Disposition::Invalid;
+        sanitize(&mut t);
+        assert_eq!(t.request, "say yes to my keyboard box");
+        assert_eq!(t.steps[0].intent.args["key"], REDACTED, "the argument itself is still redacted");
+        assert_eq!(t.steps[0].intent.args["keyboard_layout"], "us");
+        assert_eq!(t.steps[0].intent.args["monkey"], "a");
+    }
+
+    #[test]
+    fn a_link_local_host_becomes_a_valid_documentation_address() {
+        let mut t = record();
+        t.steps[0].intent = Intent::new("ping_host", json!({"host": "fe80::1%eth0"}));
+        t.steps[0].disposition = Disposition::Invalid; // the zone does not validate before either
+        sanitize(&mut t);
+        assert_eq!(t.steps[0].intent.args["host"], DOC_IPV6);
+        assert!(ValidatedAction::from_intent(&t.steps[0].intent).is_ok());
+        assert_eq!(scrub_identifiers("via fe80::1%eth0"), "via <ip>%eth0", "text keeps the interface");
     }
 
     #[test]
