@@ -269,6 +269,7 @@ impl Builder {
             let n = post::strip(dest, &root)?;
             log::info!("{}: stripped {n} files", r.package.name);
         }
+        check_no_dropped_files(r, &root, dest)?;
         let repo = self.repo();
         let pkg = create_package(dest, r.manifest(self.epoch), &repo)?;
         // Then drop older builds of this package (other versions) from the repository.
@@ -312,6 +313,34 @@ impl Builder {
         cmd.status().map_err(|e| e.to_string())?;
         Ok(())
     }
+}
+
+/// A rebuild at the same version and release must not lose files the installed
+/// build has. That happens when an install step looks at the running system (pip
+/// and ensurepip skip what is already installed there), so a package would depend
+/// on what the build root happened to contain. A deliberate removal comes with a
+/// new release number.
+fn check_no_dropped_files(r: &Recipe, root: &Path, dest: &Path) -> Result<(), String> {
+    let db = Db::open(root)?;
+    let Some(old) = db.get(&r.package.name) else { return Ok(()) };
+    let m = &old.manifest.package;
+    if m.version != r.package.version || m.release != r.package.release {
+        return Ok(());
+    }
+    let dropped: Vec<&str> =
+        old.files.iter().map(|f| f.path.as_str()).filter(|p| fs::symlink_metadata(dest.join(p)).is_err()).collect();
+    if dropped.is_empty() {
+        return Ok(());
+    }
+    let shown: Vec<&str> = dropped.iter().take(20).copied().collect();
+    Err(format!(
+        "this build of {} lacks {} paths the installed build of the same version has \
+         (bump the release if that is intended):\n  {}{}",
+        r.id(),
+        dropped.len(),
+        shown.join("\n  "),
+        if dropped.len() > shown.len() { "\n  ..." } else { "" }
+    ))
 }
 
 /// The AI launches programs by the name a package declares, so that name must be a
