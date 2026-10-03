@@ -362,6 +362,13 @@ fn doctor(config: &AgentConfig) -> bool {
 
     healthy &= match config.inference.backend {
         BackendKind::Rescue => check(true, "inference", "rescue mode configured (no model)"),
+        BackendKind::Script => {
+            let mut script = core_agent::backend_from_config(config);
+            match script.health() {
+                Ok(()) => check(true, "inference", &format!("{} (testing, no model)", script.name())),
+                Err(e) => check(false, "inference", &e.to_string()),
+            }
+        }
         BackendKind::Llama => {
             let mut llama =
                 LlamaServer::new(&config.inference.url, config.inference.model.clone(), Duration::from_secs(5));
