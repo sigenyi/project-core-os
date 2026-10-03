@@ -18,6 +18,9 @@ pub struct GrammarOptions<'a> {
     pub thought_max: usize,
 }
 
+/// The `thought` length the agent's grammar allows (and the action contract hashes).
+pub const AGENT_THOUGHT_MAX: usize = 160;
+
 impl Default for GrammarOptions<'_> {
     fn default() -> Self {
         GrammarOptions { actions: None, thought_max: 200 }

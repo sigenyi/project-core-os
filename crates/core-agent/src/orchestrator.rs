@@ -15,7 +15,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::io;
 
-use core_protocol::grammar::{GrammarOptions, gbnf};
+use core_protocol::grammar::{AGENT_THOUGHT_MAX, GrammarOptions, gbnf};
 use core_protocol::wire::{Capability, RejectKind, Response};
 use core_protocol::{Action, CATALOG, Executor, Intent, Risk, ValidatedAction};
 
@@ -113,8 +113,8 @@ impl Agent {
         });
         let docs = action_docs(&caps, &config);
         let names: Vec<&str> = docs.iter().map(|d| d.spec.name).collect();
-        let grammar = gbnf(&GrammarOptions { actions: Some(&names), thought_max: 160 });
-        let respond_grammar = gbnf(&GrammarOptions { actions: Some(&["respond"]), thought_max: 160 });
+        let grammar = gbnf(&GrammarOptions { actions: Some(&names), thought_max: AGENT_THOUGHT_MAX });
+        let respond_grammar = gbnf(&GrammarOptions { actions: Some(&["respond"]), thought_max: AGENT_THOUGHT_MAX });
         let prompt = PromptBuilder::new(&docs, config.inference.context_tokens, config.inference.max_tokens as usize);
         Agent {
             config,

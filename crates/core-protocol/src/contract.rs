@@ -1,10 +1,19 @@
 //! The action contract a model is trained and evaluated against.
 //!
 //! A trained model learns this crate's catalog (names, parameters, risks,
-//! executors), the grammar generated from it, and the way the agent reports
+//! executors, and the summaries, parameter docs and examples its prompt shows),
+//! the grammar generated from it, and the way the agent prompts it and reports
 //! observations back. Those together are the contract. [`fingerprint`] identifies
 //! it: a SHA-256 over a canonical description, so any change to an action, a
-//! parameter, a risk level or the grammar gives a new fingerprint.
+//! parameter, its documentation, a risk level or the grammar gives a new
+//! fingerprint.
+//!
+//! The grammar hashed is the full catalog's, with the `thought` length the agent
+//! uses ([`AGENT_THOUGHT_MAX`]). At run time the agent restricts it to the actions
+//! available on the machine; that subset comes from the same catalog. What the
+//! hash cannot see (the agent's prompt text and observation format, and validation
+//! rules that change no parameter kind) is covered by bumping
+//! [`OBSERVATION_FORMAT_VERSION`] or [`CONTRACT_VERSION`].
 //!
 //! The contract is pinned per dataset, not frozen forever: a dataset records the
 //! fingerprint its trajectories were made with, and records made with another one
@@ -17,16 +26,17 @@ use std::sync::OnceLock;
 use sha2::{Digest, Sha256};
 
 use crate::catalog::CATALOG;
-use crate::grammar::{GrammarOptions, gbnf};
+use crate::grammar::{AGENT_THOUGHT_MAX, GrammarOptions, gbnf};
 
 /// Bumped by hand when the meaning of the contract changes in a way the canonical
-/// description below does not capture.
+/// description below does not capture (a validation rule, say).
 pub const CONTRACT_VERSION: u32 = 1;
 
-/// Version of the observation text the agent feeds back to the model (labels such
-/// as `OBSERVATION`, how command output, exit status, denials and refusals are
-/// rendered; `core-agent`'s `prompt` module). Bump it whenever that format
-/// changes: the fingerprint cannot see the agent's code.
+/// Version of the text the agent gives the model: its system prompt and the
+/// observations it feeds back (labels such as `OBSERVATION`, how command output,
+/// exit status, denials and refusals are rendered; `core-agent`'s `prompt`
+/// module). Bump it whenever that text changes: the fingerprint cannot see the
+/// agent's code.
 pub const OBSERVATION_FORMAT_VERSION: u32 = 1;
 
 /// The canonical text the fingerprint is computed over, one fact per line.
@@ -41,13 +51,20 @@ pub fn canonical() -> String {
             "action {} risk={} executor={:?} category={:?} terminal={}",
             spec.name, spec.risk, spec.executor, spec.category, spec.terminal
         );
+        let _ = writeln!(out, "  summary {}", spec.summary);
+        let _ = writeln!(out, "  example {}", spec.example);
         for p in spec.params {
             let _ = writeln!(out, "  param {} required={} kind={}", p.name, p.required, p.kind.describe());
+            let _ = writeln!(out, "    doc {}", p.doc);
         }
     }
     let _ = writeln!(out, "grammar");
-    out.push_str(&gbnf(&GrammarOptions::default()));
+    out.push_str(&gbnf(&agent_grammar_options()));
     out
+}
+
+fn agent_grammar_options() -> GrammarOptions<'static> {
+    GrammarOptions { actions: None, thought_max: AGENT_THOUGHT_MAX }
 }
 
 /// `sha256:<hex>` of [`canonical`].
@@ -89,9 +106,14 @@ mod tests {
             assert!(c.contains(&format!("action {} risk={}", spec.name, spec.risk)), "{}", spec.name);
             for p in spec.params {
                 assert!(c.contains(&format!("  param {} required={}", p.name, p.required)), "{}.{}", spec.name, p.name);
+                assert!(c.contains(&format!("    doc {}", p.doc)), "{}.{}", spec.name, p.name);
             }
+            assert!(c.contains(&format!("  summary {}", spec.summary)), "{}", spec.name);
+            assert!(c.contains(&format!("  example {}", spec.example)), "{}", spec.name);
         }
-        assert!(c.contains(&gbnf(&GrammarOptions::default())), "the grammar text is included");
+        assert!(c.contains(&gbnf(&agent_grammar_options())), "the agent's grammar is included");
+        // The thought length is the agent's, not the grammar module's default.
+        assert_ne!(gbnf(&agent_grammar_options()), gbnf(&GrammarOptions::default()));
     }
 
     #[test]

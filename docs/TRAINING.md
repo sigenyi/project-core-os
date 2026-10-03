@@ -56,8 +56,12 @@ Rust toolchain are deferred: none of them is on the model's critical path.
 The model is trained against a contract: the action catalog (names, parameters, risk,
 executor), the grammar generated from it, and the observation format the agent
 feeds back. `core_protocol::contract` identifies it with a version and a SHA-256
-fingerprint of the catalog and grammar (`core-ctl contract`). Every Guardian audit
-entry and every trajectory record carries the fingerprint.
+fingerprint (`core-ctl contract`) of the catalog, including the summaries, parameter
+docs and examples shown in the prompt, and of the grammar as the agent generates it.
+What the hash cannot see is versioned by hand: the agent's prompt and observation
+text (`OBSERVATION_FORMAT_VERSION`) and validation rules that change no parameter
+kind (`CONTRACT_VERSION`). Every Guardian audit entry and every trajectory record
+carries the fingerprint.
 
 The contract is **pinned per dataset, not frozen forever**: a dataset manifest names
 the fingerprint its records were made with, and a validator rejects records made
@@ -72,9 +76,15 @@ checks. The format is defined in `core_protocol::trajectory` and checked by
 `core-ctl trajectory check FILE --contract FINGERPRINT`:
 
 - every intent must validate against the catalog;
-- secret parameters (Wi-Fi passphrases) must be redacted;
-- observations are sanitized: secrets, MAC addresses, non-loopback IP addresses,
-  and user names in home paths are replaced by placeholders;
+- secret parameters (Wi-Fi passphrases) must be redacted, and their values are
+  scrubbed wherever they were echoed. This only works on the raw episode: records
+  must be sanitized before anything else redacts them;
+- the request, thoughts, observations and free-text arguments are sanitized: MAC
+  addresses, non-loopback IP addresses (also in URLs, with ports, IPv4-mapped) and
+  user names in home paths become placeholders; typed arguments get reserved
+  documentation values (192.0.2.1, 2001:db8::1, /home/user) so they still
+  validate. A four-part version number reads as an IPv4 address and is scrubbed
+  too;
 - every record names its contract fingerprint, fixture, split and outcome.
 
 Dry runs and replays in a planner prove only that a plan was made. A repair is
