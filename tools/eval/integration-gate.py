@@ -335,7 +335,7 @@ def run_gate(a, gate):
     rows, _ = g.client(USER, "oversized")
     g.check("protocol", "an oversized frame is refused and the connection closed",
             response_of(rows, "oversized frame").get("type") == "error"
-            and response_of(rows, "after the refusal").get("type") == "closed", rows=rows)
+            and response_of(rows, "after the refusal").get("type") in ("closed", "reset"), rows=rows)
     au = g.audit_since(n)
     g.check("protocol", "the protocol checks left the matching audit entries",
             {"confirmation_required", "confirmed", "declined", "confirmation_expired", "denied", "invalid"}

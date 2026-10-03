@@ -162,7 +162,13 @@ def main(argv):
             c = Conn()
             c.s.sendall(struct.pack(">I", (1 << 20) + 1) + b"{")
             out(step="oversized frame", response=summary(c.recv()))
-            out(step="after the refusal", response=summary(c.recv()))
+            try:
+                after = summary(c.recv())
+            except ConnectionResetError:
+                # Closing with our unread bytes still queued makes the kernel reset
+                # the connection instead of ending it cleanly: closed either way.
+                after = {"type": "reset"}
+            out(step="after the refusal", response=after)
         else:
             out(error=f"unknown command {cmd}")
             return 2
