@@ -32,7 +32,7 @@ CHECKS = [
     ("journal errors (shown, not fatal)", "journalctl -b --no-pager -q -p err -o cat | tail -n 20; echo journal-ok", r"journal-ok"),
     ("root file system", "findmnt -no SOURCE,FSTYPE,OPTIONS /", r"ext4\s+rw"),
     ("memory", "free -m | awk '/Mem:/{print \"used_mb=\"$3}'", r"used_mb=\d+"),
-    ("packages", "cpkg list | wc -l", r"^\s*81\s*$"),
+    ("packages", "cpkg list | wc -l", r"^\s*89\s*$"),
     ("package integrity", "cpkg verify && echo verify-ok", r"verify-ok"),
     ("library closure", "cpkg why glibc | head -3; echo why-ok", r"why-ok"),
     ("C compiler, glibc and kernel headers",
