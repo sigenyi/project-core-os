@@ -233,3 +233,35 @@ None of these is decided. Each needs Joel's decision before the phase that needs
 | D10 | Other distributions' backends | integration | Keep pacman/apt/... in the Guardian for development, or remove them. |
 | D11 | Wi-Fi daemon | later | iwd or wpa_supplicant; neither is in the base. Wi-Fi actions currently report that no Wi-Fi daemon is configured. |
 | D12 | Package release numbers | integration | Bump the release on every content change (recommended) or not. |
+
+### Proposals for D9, D10 and D12 (not decided)
+
+These are proposed defaults, so that integration work is not blocked. They are not
+decisions: each stays open until Joel accepts, changes or rejects it, and nothing in
+the code depends on them yet.
+
+- **D9, model for the integration gate. Proposal:** pass the integration gate with
+  the deterministic rescue planner and with a *scripted* intent source that replays
+  each task's reference intents through the real agent, socket and Guardian. Leave
+  off-the-shelf models out of the gate; they may be run as a separate, non-gating
+  smoke test once D1 to D3 allow a model to be downloaded. *Why:* the integration
+  gate tests the Guardian's paths (peer authentication, policy, confirmation,
+  execution, audit), and those do not depend on which component produced the intent.
+  The rescue planner covers only some requests (see Baselines), and a replay source
+  covers the rest without any model, download or license. A model in the gate would
+  mix model quality into a test of plumbing, which the product acceptance gate
+  measures separately.
+- **D10, other distributions' backends. Proposal:** keep the pacman, apt, dnf,
+  zypper, apk, xbps and NetworkManager planners for now, documented as development
+  backends. `cpkg` and networkd stay the defaults and the only backends in the
+  shipped configuration. Review the question again when phase 2 ends. *Why:*
+  `core-shell --dev` and the Guardian's tests run on ordinary Linux hosts, where
+  these backends are what exists, and their tests keep the planner honest. They cost
+  little, removing them later is easy, and restoring them would not be.
+- **D12, package release numbers. Proposal:** bump the release number whenever a
+  package's content changes, even when the upstream version does not, and never
+  publish two different archives with the same name, version and release. *Why:*
+  `cpkg upgrade` and the signed index identify packages by version and release, so
+  a rebuilt package with an unchanged release looks already installed and is never
+  delivered. Distinct releases also let a trajectory, a test result or an image name
+  the exact package it was made with.
