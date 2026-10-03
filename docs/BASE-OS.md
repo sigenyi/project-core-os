@@ -142,7 +142,7 @@ should.
 
 | Suite | Passed | Expected bad results | Not run |
 |---|---|---|---|
-| glibc 2.43 | 7,252 | 3 XPASS | 14 unsupported (below) |
+| glibc 2.43 | 7,253 | 3 XPASS | 14 unsupported (below) |
 | binutils 2.46 (binutils, gas, ld, libctf, libsframe) | 5,901 | none | |
 | GCC 15.2 (gcc, g++, libstdc++, libgomp, libatomic, libitm) | 491,862 | 125, explained below | |
 
