@@ -25,14 +25,13 @@ rm -f "$DESTDIR"/usr/lib/lib{bfd,ctf,ctf-nobfd,opcodes,sframe}.a
 check = '''
 cd build
 make -k check > "$RESULTS/make-check.log" 2>&1 || true
-# Each suite writes <tool>.sum in its own directory. All five must be there, or a
-# suite did not run.
+# Each suite writes <tool>.sum in its own directory.
 sums=$(find . -name '*.sum' | sort)
-for tool in binutils gas ld libctf libsframe; do
-  printf '%s\n' $sums | grep -q "/$tool\.sum$" || { echo "no $tool.sum: that suite did not run" >&2; exit 1; }
-done
 for f in $sums; do cp --parents "$f" "$RESULTS/"; [ -f "${f%.sum}.log" ] && cp --parents "${f%.sum}.log" "$RESULTS/"; done
-# 5900 tests passed across these suites in the first full run.
+# Every suite must have run to its end, each with a floor of its own, a little
+# under its full run (binutils 346, gas 2091, ld 3258, libctf 38, libsframe 168
+# passes), so that one small suite running nothing cannot hide in the total.
 python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
-  --min-pass 5800 $sums
+  --min-pass 5800 --require binutils=330 --require gas=2000 --require ld=3150 \
+  --require libctf=35 --require libsframe=160 $sums
 '''

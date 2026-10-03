@@ -2,6 +2,7 @@
 """Boot a C.O.R.E. OS image in QEMU and check it from the inside.
 
     boot-test.py IMAGE [--uefi] [--password core] [--new-password ...]
+    boot-test.py --self-test
 
 The serial console is driven like a user would: wait for the login prompt, log in
 as root, change the first-login password, run checks, power off. Exits non-zero
@@ -20,11 +21,29 @@ import time
 # strip those and other terminal escapes before matching output.
 ESCAPES = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]")
 
+# Kernel messages reach the serial console in the middle of command output.
+KERNEL_LOG = re.compile(r"^\[\s*\d+\.\d+\] .*$\n?", re.M)
+
 # Combined code+variables images, which -bios can load.
 OVMF = ["/usr/share/ovmf/OVMF.fd", "/usr/share/OVMF/OVMF.fd"]
 
+# What `cpkg verify` may report on a freshly built image: systemd-sysusers adds
+# systemd's system users and groups, and mkimage.sh sets the root password.
+EXPECTED_VERIFY = {f"filesystem: /etc/{f} modified configuration" for f in ("group", "gshadow", "passwd", "shadow")}
+
+
+def verify_passed(out):
+    """cpkg verify must exit 0 and say what it found: either that all files are
+    intact, or findings that are all expected. No output is not a pass."""
+    lines = [line.strip() for line in out.splitlines() if line.strip()]
+    if not lines or lines[-1] != "verify-exit=0":
+        return False
+    found = set(lines[:-1])
+    return found == {"all files intact"} or (bool(found) and found <= EXPECTED_VERIFY)
+
 CHECKS = [
-    # (description, command, regex the output must match)
+    # (description, command, regex the output must match, or a function that
+    # decides from the output)
     ("kernel", "uname -r", r"7\.0\.0-core"),
     ("os-release", ". /etc/os-release; echo $NAME", r"C\.O\.R\.E\. OS"),
     ("systemd state", "systemctl is-system-running --wait", r"^(running|degraded)"),
@@ -33,7 +52,7 @@ CHECKS = [
     ("root file system", "findmnt -no SOURCE,FSTYPE,OPTIONS /", r"ext4\s+rw"),
     ("memory", "free -m | awk '/Mem:/{print \"used_mb=\"$3}'", r"used_mb=\d+"),
     ("packages", "cpkg list | wc -l", r"^\s*89\s*$"),
-    ("package integrity", "cpkg verify && echo verify-ok", r"verify-ok"),
+    ("package integrity", "cpkg verify 2>&1; echo verify-exit=$?", verify_passed),
     ("library closure", "cpkg why glibc | head -3; echo why-ok", r"why-ok"),
     ("C compiler, glibc and kernel headers",
      "printf '#include <errno.h>\\n#include <pthread.h>\\n#include <stdio.h>\\n#include <linux/limits.h>\\n"
@@ -86,7 +105,36 @@ class Console:
         self.proc.stdin.flush()
 
 
+def self_test():
+    expected = "\n".join(sorted(EXPECTED_VERIFY))
+    assert verify_passed(f"{expected}\nverify-exit=0")
+    assert verify_passed("all files intact\nverify-exit=0")
+    assert verify_passed("filesystem: /etc/group modified configuration\nverify-exit=0")
+    # A failing exit status fails the check even if the output looks harmless.
+    assert not verify_passed(f"{expected}\nverify-exit=1")
+    assert not verify_passed("verify-exit=1")
+    # So does any other finding: a broken file, or configuration nobody expected
+    # to change (older cpkg versions exited 0 on these).
+    assert not verify_passed(f"{expected}\nbash: /usr/bin/bash modified\nverify-exit=0")
+    assert not verify_passed("glibc: /usr/lib/libc.so.6 missing\nverify-exit=1")
+    assert not verify_passed("systemd: /etc/systemd/system.conf modified configuration\nverify-exit=0")
+    # The old check passed whenever this marker printed; an exit status without
+    # any report from cpkg, or no output at all, is a failure too.
+    assert not verify_passed("verify-ok")
+    assert not verify_passed("verify-exit=0")
+    assert not verify_passed("")
+    # "All intact" alongside findings is not a report cpkg gives.
+    assert not verify_passed(f"all files intact\n{expected}\nverify-exit=0")
+    # Kernel messages on the console are removed before checks see the output.
+    noisy = "[   19.024841] (udev-worker) (189) used greatest stack depth: 12376 bytes left\nused_mb=254\n"
+    assert KERNEL_LOG.sub("", noisy) == "used_mb=254\n"
+    print("self-test ok")
+
+
 def main():
+    if sys.argv[1:] == ["--self-test"]:
+        self_test()
+        return
     ap = argparse.ArgumentParser()
     ap.add_argument("image")
     ap.add_argument("--uefi", action="store_true")
@@ -132,9 +180,9 @@ def main():
         for desc, command, want in CHECKS:
             con.send(command + "; echo __END__\n")
             out = con.expect(r"__END__\r?\n", 600)
-            out = ESCAPES.sub("", out).replace("\r", "")
+            out = KERNEL_LOG.sub("", ESCAPES.sub("", out).replace("\r", ""))
             out = out.rsplit("__END__", 1)[0].strip()
-            good = re.search(want, out, re.M) is not None
+            good = want(out) if callable(want) else re.search(want, out, re.M) is not None
             ok &= good
             print(f"[{'ok' if good else 'FAIL'}] {desc}:")
             print("    " + out[:1500].replace("\n", "\n    "))

@@ -96,17 +96,17 @@ su tester -s /usr/bin/bash -c "PATH=$PATH LOCPATH=$L make -k -j$JOBS check" > "$
 chown -R root:root ..
 ../contrib/test_summary > "$RESULTS/test_summary.txt" 2>&1 || true
 # With -j, suites run in parts (gcc1/, normal1/, ...) that are merged into one
-# <tool>.sum at the end; use only the merged files, one per suite, and require
-# every suite, or one did not run.
+# <tool>.sum at the end; use only the merged files, one per suite.
 sums=$(find . -name '*.sum' -path '*testsuite*' | grep -vE '/(gcc|g\+\+|normal)[0-9]+/' | sort)
-for tool in gcc g++ libstdc++ libgomp libatomic libitm; do
-  printf '%s\n' $sums | grep -q "/$tool\.sum$" || { echo "no $tool.sum: that suite did not run" >&2; exit 1; }
-done
 for f in $sums; do cp --parents "$f" "$RESULTS/"; [ -f "${f%.sum}.log" ] && cp --parents "${f%.sum}.log" "$RESULTS/"; done
 find "$RESULTS" -name '*.log' -size +5M -exec xz -T0 {} +
-# 484450 tests passed across these suites in the first full run.
+# Every suite must have run to its end, each with a floor of its own, a little
+# under its full run (gcc 216760, g++ 248904, libstdc++ 20066, libgomp 6034,
+# libatomic 54, libitm 44 passes), so that one small suite running nothing
+# cannot hide in the total.
 python3 ../compare-results.py --expected ../expected-failures.txt --summary "$RESULTS/summary.txt" \
-  --min-pass 480000 $sums
+  --min-pass 480000 --require gcc=210000 --require g++=240000 --require libstdc++=19500 \
+  --require libgomp=5800 --require libatomic=50 --require libitm=40 $sums
 '''
 
 [ai]
