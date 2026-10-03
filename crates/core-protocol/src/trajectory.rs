@@ -130,9 +130,10 @@ impl Outcome {
             && self.checks.iter().all(|c| c.passed)
     }
 
-    /// Ways the outcome contradicts itself.
-    fn contradictions(&self, steps: usize) -> Vec<String> {
+    /// Ways the outcome contradicts itself or the steps it describes.
+    fn contradictions(&self, steps: &[Step]) -> Vec<String> {
         let mut out = Vec::new();
+        let executed = |d: Disposition| matches!(d, Disposition::Allowed | Disposition::Confirmed);
         if self.verdict == Verdict::Passed {
             if !self.step_failures.is_empty() {
                 out.push("verdict passed, but a required step failed".into());
@@ -146,12 +147,27 @@ impl Outcome {
             if !self.reasons.is_empty() {
                 out.push("verdict passed, but it gives failure reasons".into());
             }
-        } else if self.reasons.is_empty() {
+            if !steps.is_empty() && steps.iter().all(|s| s.disposition == Disposition::Invalid) {
+                out.push("verdict passed, but no step was a valid action".into());
+            }
+        } else if self.reasons.is_empty() || self.reasons.iter().any(|r| r.trim().is_empty()) {
             out.push("verdict failed without a reason".into());
         }
         for f in &self.step_failures {
-            if f.step == 0 || f.step > steps {
-                out.push(format!("step failure names step {}, the episode has {steps}", f.step));
+            match f.step.checked_sub(1).and_then(|i| steps.get(i)) {
+                None => out.push(format!("step failure names step {}, the episode has {}", f.step, steps.len())),
+                Some(step) if !executed(step.disposition) => out.push(format!(
+                    "step failure names step {}, which was {:?} and never ran",
+                    f.step, step.disposition
+                )),
+                Some(_) => {}
+            }
+        }
+        // An executed step whose observation reports a failure must be recorded as one.
+        for (i, step) in steps.iter().enumerate() {
+            let reports_failure = step.observation.lines().next().is_some_and(|l| l.contains(": FAILED"));
+            if executed(step.disposition) && reports_failure && !self.step_failures.iter().any(|f| f.step == i + 1) {
+                out.push(format!("step {} reports a failure that the outcome does not record", i + 1));
             }
         }
         out
@@ -224,6 +240,9 @@ pub fn sanitize(t: &mut Trajectory) {
     }
     for f in &mut t.outcome.step_failures {
         f.detail = clean(&f.detail);
+    }
+    for c in &mut t.outcome.checks {
+        c.name = clean(&c.name);
     }
     for step in &mut t.steps {
         step.observation = clean(&step.observation);
@@ -325,7 +344,7 @@ pub fn validate(t: &Trajectory, contract: &str) -> Vec<String> {
     if t.outcome.checks.is_empty() {
         problems.push("no state checks".into());
     }
-    problems.extend(t.outcome.contradictions(t.steps.len()));
+    problems.extend(t.outcome.contradictions(&t.steps));
     problems
 }
 
@@ -387,8 +406,15 @@ fn scrub_segment(seg: &str, style: Style) -> String {
     // Sentence punctuation after an address is not part of it. A trailing colon is
     // trimmed only when the text is not an address already: in 2001:4860:: the
     // colons are the address (zero compression), in "10.0.0.1:" they are not.
-    let dots_trimmed = core.trim_end_matches('.');
-    let trimmed = if is_ipv6(dots_trimmed) { dots_trimmed } else { dots_trimmed.trim_end_matches([':', '.']) };
+    // Colons come off one at a time, so "2001:4860:::" (an address and a colon)
+    // still finds 2001:4860::.
+    let mut trimmed = core.trim_end_matches('.');
+    while !is_ipv6(trimmed) && trimmed.ends_with(':') {
+        trimmed = &trimmed[..trimmed.len() - 1];
+    }
+    if !is_ipv6(trimmed) {
+        trimmed = trimmed.trim_end_matches([':', '.']);
+    }
     let trailing = &core[trimmed.len()..];
     let (mac, v4, v6) = match style {
         Style::Placeholders => ("<mac>", "<ip>", "<ip>"),
@@ -420,8 +446,13 @@ fn identifying_ipv4(ip: [u8; 4]) -> bool {
     ip[0] != 127 && ip != [0, 0, 0, 0] && !(ip[0] == 192 && ip[1] == 0 && ip[2] == 2)
 }
 
+/// Loopback, unspecified, IPv4-mapped loopback and documentation (2001:db8::/32)
+/// addresses identify nobody, however they are spelled.
 fn identifying_ipv6(s: &str) -> bool {
-    !matches!(s, "::1" | "::") && !s.to_ascii_lowercase().starts_with("2001:db8:")
+    let Ok(a) = s.parse::<std::net::Ipv6Addr>() else { return true };
+    let documentation = a.segments()[0] == 0x2001 && a.segments()[1] == 0x0db8;
+    let mapped_loopback = a.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback() || v4.is_unspecified());
+    !(a.is_loopback() || a.is_unspecified() || documentation || mapped_loopback)
 }
 
 fn scrub_home(token: &str, style: Style) -> String {
@@ -758,6 +789,75 @@ mod tests {
         silent.outcome.reasons.clear();
         let problems = validate(&silent, crate::contract::fingerprint());
         assert!(problems.iter().any(|p| p.contains("without a reason")), "{problems:?}");
+    }
+
+    #[test]
+    fn outcomes_that_contradict_their_steps_are_reported() {
+        let fp = crate::contract::fingerprint();
+        let has = |t: &Trajectory, what: &str| validate(t, fp).iter().any(|p| p.contains(what));
+        // An executed step whose observation says FAILED, but no recorded failure.
+        let mut t = record();
+        t.steps[0].observation = "OBSERVATION (install_package: FAILED, exit code 1)\nno repository".into();
+        assert!(has(&t, "reports a failure that the outcome does not record"));
+        // Recorded as a failure, the same episode is a valid failed example.
+        t.outcome.step_failures = vec![StepFailure { step: 1, detail: "cpkg install -- nano exited 1".into() }];
+        t.outcome.verdict = Verdict::Failed;
+        t.outcome.reasons = vec!["solution step failed".into()];
+        assert_eq!(validate(&t, fp), Vec::<String>::new());
+        // A failure attributed to a step that never ran.
+        t.steps[0].disposition = Disposition::Denied;
+        assert!(has(&t, "never ran"));
+        // A blank reason is no reason.
+        let mut t = record();
+        t.outcome.verdict = Verdict::Failed;
+        t.outcome.reasons = vec![" ".into()];
+        assert!(has(&t, "without a reason"));
+        // Passing with nothing but invalid actions.
+        let mut t = record();
+        for s in &mut t.steps {
+            s.disposition = Disposition::Invalid;
+        }
+        assert!(has(&t, "no step was a valid action"));
+        // A model that corrects an invalid action and then succeeds may pass.
+        let mut t = record();
+        t.steps.insert(
+            0,
+            Step {
+                intent: Intent::new("install_pkg", json!({})),
+                disposition: Disposition::Invalid,
+                observation: "OBSERVATION (invalid action)".into(),
+            },
+        );
+        assert_eq!(validate(&t, fp), Vec::<String>::new());
+    }
+
+    #[test]
+    fn check_names_are_sanitized() {
+        let mut t = record();
+        t.outcome.checks[0].name = "192.168.1.9 answers".into();
+        assert!(validate(&t, crate::contract::fingerprint()).iter().any(|p| p.contains("not sanitized")));
+        sanitize(&mut t);
+        assert_eq!(t.outcome.checks[0].name, "<ip> answers");
+    }
+
+    #[test]
+    fn ipv6_followed_by_a_colon_and_exemptions_in_any_spelling() {
+        assert_eq!(scrub_identifiers("dns 2001:4860::: and fe80:::"), "dns <ip>: and <ip>:");
+        for kept in ["2001:DB8::1", "2001:0db8::1", "0:0:0:0:0:0:0:1", "::ffff:127.0.0.1", "0::0"] {
+            assert_eq!(scrub_identifiers(kept), kept, "{kept}");
+            let mut t = record();
+            t.steps[0].intent = Intent::new("ping_host", json!({"host": kept}));
+            sanitize(&mut t);
+            assert_eq!(t.steps[0].intent.args["host"], kept, "typed {kept} keeps its meaning");
+        }
+        let mut t = record();
+        t.steps[0].intent = Intent::new("ping_host", json!({"host": "2001:4860::"}));
+        t.request = "use 2001:4860:::".into();
+        sanitize(&mut t);
+        assert_eq!(t.request, "use <ip>:");
+        let once = t.clone();
+        sanitize(&mut t);
+        assert_eq!(t, once, "idempotent");
     }
 
     #[test]
