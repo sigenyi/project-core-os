@@ -10,6 +10,7 @@
 pub mod action;
 pub mod catalog;
 pub mod choice;
+pub mod contract;
 pub mod grammar;
 pub mod intent;
 pub mod logging;

@@ -214,6 +214,9 @@ impl Guardian {
     fn audit_event(&self, peer: Peer, id: u64, mut entry: Value) {
         entry["peer"] = json!({"uid": peer.uid, "pid": peer.pid});
         entry["request"] = Value::from(id);
+        // Which action contract this entry was made under (trajectories built
+        // from the log are pinned to it; docs/TRAINING.md).
+        entry["contract"] = Value::from(core_protocol::contract::fingerprint());
         log::info!("{entry}");
         self.audit.record(entry);
     }
@@ -264,6 +267,28 @@ mod tests {
 
     fn exec(g: &Guardian, s: &mut Session, action: &str, args: serde_json::Value) -> Response {
         g.handle(s, Request::Execute { id: 1, intent: Intent::new(action, args) })
+    }
+
+    #[test]
+    fn audit_entries_name_the_action_contract() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let g = Guardian::new(
+            config(),
+            Box::new(ScriptedRunner::default()),
+            Box::new(NoProbe),
+            AuditLog::open(&path).unwrap(),
+        );
+        let mut s = g.new_session(peer());
+        exec(&g, &mut s, "restart_service", json!({"service": "bluetooth"}));
+        exec(&g, &mut s, "install_package", json!({"package": "w3m"}));
+        let text = std::fs::read_to_string(&path).unwrap();
+        let entries: Vec<serde_json::Value> = text.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        assert_eq!(entries.len(), 2);
+        for e in &entries {
+            assert_eq!(e["contract"], core_protocol::contract::fingerprint(), "{e}");
+        }
+        assert_eq!(entries[1]["decision"], "confirmation_required");
     }
 
     #[test]

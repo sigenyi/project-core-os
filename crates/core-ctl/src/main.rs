@@ -47,6 +47,12 @@ enum Cmd {
     Prompt,
     /// Validate an intent JSON offline and show its normalised form.
     Validate { intent: String },
+    /// Show the action contract's version and fingerprint (docs/TRAINING.md).
+    Contract {
+        /// Print the canonical text the fingerprint is computed over.
+        #[arg(long)]
+        canonical: bool,
+    },
     /// Send an intent straight to the Guardian (prompts for confirmation if needed).
     Exec {
         intent: String,
@@ -121,6 +127,16 @@ fn run(cmd: Cmd, config: &AgentConfig) -> Result<bool, String> {
                 Box::new(StaticTelemetry(Default::default())),
             );
             println!("{}", agent.system_prompt());
+        }
+        Cmd::Contract { canonical } => {
+            if canonical {
+                print!("{}", core_protocol::contract::canonical());
+            } else {
+                println!("contract:           {}", core_protocol::contract::CONTRACT_VERSION);
+                println!("observation format: {}", core_protocol::contract::OBSERVATION_FORMAT_VERSION);
+                println!("protocol:           {}", core_protocol::PROTOCOL_VERSION);
+                println!("fingerprint:        {}", core_protocol::contract::fingerprint());
+            }
         }
         Cmd::Validate { intent } => {
             let parsed = Intent::parse(&intent).map_err(|e| e.to_string())?;
